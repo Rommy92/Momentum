@@ -28,22 +28,18 @@ def get_stock_summary(tickers):
             close = hist['Close']
             price = close.iloc[-1]
 
-            # --- % changes ---
             pct_5d = round((price - close.iloc[-6]) / close.iloc[-6] * 100, 2) if len(close) >= 6 else None
             pct_1m = round((price - close.iloc[-22]) / close.iloc[-22] * 100, 2) if len(close) >= 22 else None
             high_2yr = close.max()
             pct_from_ath = round((price - high_2yr) / high_2yr * 100, 2)
 
-            # RSI
             rsi = RSIIndicator(close=close).rsi()
             rsi_val = round(rsi.iloc[-1], 2)
 
-            # Fundamentals
             pe = info.get("trailingPE", None)
             fpe = info.get("forwardPE", None)
             pb = info.get("priceToBook", None)
 
-            # RSI Signal
             rsi_signal = (
                 "💚 Buy" if rsi_val < 30 else
                 "🟡 Watch" if rsi_val < 50 else
@@ -53,15 +49,15 @@ def get_stock_summary(tickers):
 
             rows.append({
                 "Ticker": ticker,
-                "Price": price,
-                "% 5D": pct_5d,
-                "% 1M": pct_1m,
-                "% from ATH": pct_from_ath,
-                "RSI": rsi_val,
+                "Price": f"${price:.2f}",
+                "% 5D": f"{pct_5d:.1f}%" if pct_5d is not None else "–",
+                "% 1M": f"{pct_1m:.1f}%" if pct_1m is not None else "–",
+                "% from ATH": f"{pct_from_ath:.1f}%" if pct_from_ath is not None else "–",
+                "RSI": f"{rsi_val:.1f}",
                 "RSI Signal": rsi_signal,
-                "P/E": pe,
-                "Fwd P/E": fpe,
-                "P/B": pb,
+                "P/E": f"{pe:.1f}" if pe is not None else "–",
+                "Fwd P/E": f"{fpe:.1f}" if fpe is not None else "–",
+                "P/B": f"{pb:.1f}" if pb is not None else "–",
             })
 
         except Exception as e:
@@ -73,30 +69,11 @@ def get_stock_summary(tickers):
 with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
-# ✅ Preserve your manual market cap order
 df["Ticker"] = pd.Categorical(df["Ticker"], categories=TOP_TECH_TICKERS, ordered=True)
 df = df.sort_values("Ticker")
 
 st.subheader("📊 Pullback & Momentum Overview")
-
-# Styling
-styled_df = df.style \
-    .set_properties(**{'text-align': 'center'}) \
-    .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]}]) \
-    .background_gradient(subset=["% 5D", "% 1M", "% from ATH"], cmap="YlOrRd", low=0.2, high=0.8) \
-    .background_gradient(subset=["RSI"], cmap="RdYlGn_r", low=0.2, high=0.8) \
-    .format({
-        "Price": "${:.2f}",
-        "% 5D": "{:.1f}%",
-        "% 1M": "{:.1f}%",
-        "% from ATH": "{:.1f}%",
-        "RSI": "{:.1f}",
-        "P/E": "{:.1f}",
-        "Fwd P/E": "{:.1f}",
-        "P/B": "{:.1f}"
-    }, na_rep="–")
-
-st.dataframe(styled_df, use_container_width=True)
+st.dataframe(df, use_container_width=True)
 
 # -------------- FOOTER ------------------
 st.markdown("---")
