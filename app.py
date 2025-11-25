@@ -5,7 +5,7 @@ from ta.momentum import RSIIndicator
 
 # -------------- CONFIG ------------------
 st.set_page_config(page_title="Tech Snapshot", layout="wide")
-st.title("🔍 Dashboard - AI, Infra, SaaS, Cybersecurity
+st.title("🔍 Dashboard - AI, Infra, SaaS, Cybersecurity")
 st.caption("Last updated: {}".format(pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')))
 
 # ✅ Manually ordered by market cap descending
