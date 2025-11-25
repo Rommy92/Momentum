@@ -14,7 +14,7 @@ TOP_TECH_TICKERS = [
     "TSM", "AVGO", "ORCL", "NFLX", "CRM",
     "AMD", "NOW", "MU", "SNOW", "PLTR",
     "ANET", "CRWD", "PANW", "NET", "DDOG",
-    "MDB", "MRVL"
+    "MDB", "MRVL", "IBM"
 ]
 
 
