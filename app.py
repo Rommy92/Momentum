@@ -91,8 +91,12 @@ def get_stock_summary(tickers):
             rsi_series = RSIIndicator(close=close).rsi()
             rsi_val = float(round(rsi_series.iloc[-1], 2))
 
-            # ----- Fundamentals from Yahoo (info is ugly but still useful) -----
-            info = stock.info  # still the easiest way, but we don't trust forwardPE
+            # ----- Fundamentals from Yahoo -----
+            # Use get_info() instead of .info property (cleaner in new yfinance)
+            try:
+                info = stock.get_info()
+            except Exception:
+                info = {}
 
             # Trailing P/E directly
             pe = info.get("trailingPE", None)
@@ -102,15 +106,39 @@ def get_stock_summary(tickers):
                 except (TypeError, ValueError):
                     pe = None
 
-            # Forward EPS from Yahoo, then compute forward P/E ourselves
-            forward_eps = info.get("forwardEps", None)
+            # --- Forward EPS from eps_trend (preferred) ---
             fpe = None
-            if forward_eps is not None:
+            forward_eps = None
+
+            try:
+                eps_trend = stock.get_eps_trend()
+                if eps_trend is not None and not eps_trend.empty:
+                    # Prefer next-year EPS if available, else current-year
+                    idx = None
+                    for candidate in ["+1y", "0y"]:
+                        if candidate in eps_trend.index:
+                            idx = candidate
+                            break
+
+                    if idx is not None and "current" in eps_trend.columns:
+                        val = eps_trend.loc[idx, "current"]
+                        if pd.notna(val):
+                            forward_eps = float(val)
+            except Exception:
+                forward_eps = None
+
+            # Fallback: old forwardEps from info if eps_trend missing
+            if forward_eps is None:
+                fe = info.get("forwardEps", None)
                 try:
-                    forward_eps = float(forward_eps)
-                    if forward_eps > 0:
-                        fpe = round(price / forward_eps, 2)
-                except (TypeError, ValueError, ZeroDivisionError):
+                    forward_eps = float(fe) if fe is not None else None
+                except (TypeError, ValueError):
+                    forward_eps = None
+
+            if forward_eps is not None and forward_eps > 0:
+                try:
+                    fpe = round(price / forward_eps, 2)
+                except ZeroDivisionError:
                     fpe = None
 
             # Simple RSI label (still useful as a quick read)
