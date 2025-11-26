@@ -379,19 +379,33 @@ with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
 if not df.empty:
-    # use ticker as index (saves width, nicer on phone)
     df = df.set_index("Ticker")
 
-    # style numeric columns but keep them as floats for proper sorting
     styled = df.style.format({
         "P/E": "{:.1f}",
         "Fwd P/E": "{:.1f}",
         "RSI": "{:.1f}",
     }, na_rep="–")
 
-    st.dataframe(styled, use_container_width=True, height=600)
+    # -------- NEW: Center all headers & cells --------
+    styled = styled.set_table_styles(
+        [
+            {"selector": "th", "props": [("text-align", "center")]},
+            {"selector": "td", "props": [("text-align", "center")]},
+        ],
+        overwrite=False
+    )
+
+    # -------- NEW: Auto column width --------
+    st.dataframe(
+        styled,
+        use_container_width=True,
+        height=600,
+        column_config={col: st.column_config.Column(width="fit") for col in df.columns}
+    )
 else:
     st.write("No data loaded.")
+
 
 st.markdown("---")
 st.markdown("""
