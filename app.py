@@ -386,7 +386,6 @@ else:
 
 st.markdown("---")
 st.markdown("""
-### 📘 How to read the signals
 
 **RSI Zone (classic RSI view)**  
 - 💚 **Oversold** = RSI < 30  
