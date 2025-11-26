@@ -229,7 +229,6 @@ st.title("Tech Leadership Monitor")
 if qqq_price is not None and qqq_change_pct is not None:
     st.subheader(
         f"QQQ {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%) — "
-        f"{'Bullish' if qqq_mode=='green' else 'Bearish' if qqq_mode=='red' else 'Neutral'} market theme"
     )
 else:
     st.subheader("QQQ data unavailable — default neutral theme")
