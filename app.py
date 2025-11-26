@@ -228,7 +228,7 @@ st.title("Tech Leadership Monitor")
 
 if qqq_price is not None and qqq_change_pct is not None:
     st.subheader(
-        f"QQQ {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%) — "
+        f"QQQ {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%) "
     )
 else:
     st.subheader("QQQ data unavailable — default neutral theme")
@@ -386,7 +386,6 @@ def get_stock_summary(tickers):
 with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
-st.subheader("Tech Leadership")
 
 if not df.empty:
     st.table(df)
