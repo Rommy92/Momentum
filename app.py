@@ -107,7 +107,7 @@ h3, h4 {{
     border-right: 2px solid {accent}22;
 }}
 
-/* Table outer container: neon frame */
+/* --- st.table styling (kept in case you use it elsewhere) --- */
 [data-testid="stTable"] {{
     border: 1px solid {accent}aa !important;
     box-shadow: 0 0 25px {accent}55;
@@ -116,7 +116,6 @@ h3, h4 {{
     background-color: #000000 !important;
 }}
 
-/* Actual HTML table */
 [data-testid="stTable"] table {{
     width: 100%;
     border-collapse: collapse !important;
@@ -125,7 +124,6 @@ h3, h4 {{
     font-size: 0.9rem;
 }}
 
-/* Header row */
 [data-testid="stTable"] thead tr {{
     background-color: #101010 !important;
 }}
@@ -137,7 +135,6 @@ h3, h4 {{
     text-align: left;
 }}
 
-/* Body rows */
 [data-testid="stTable"] tbody tr:nth-child(odd) {{
     background-color: #090909 !important;
 }}
@@ -151,10 +148,25 @@ h3, h4 {{
     padding: 0.35rem 0.6rem !important;
 }}
 
-/* Row hover effect */
 [data-testid="stTable"] tbody tr:hover {{
     background-color: #1b1b1b !important;
     transition: background-color 0.12s ease-in-out;
+}}
+
+/* --- NEW: dark styling for st.dataframe (mobile-friendly) --- */
+[data-testid="stDataFrame"] div[role="grid"] {{
+    background-color: #050505 !important;
+    color: #ffffff !important;
+}}
+
+[data-testid="stDataFrame"] div[role="columnheader"] {{
+    background-color: #101010 !important;
+    color: {accent} !important;
+    border-bottom: 1px solid {accent}77 !important;
+}}
+
+[data-testid="stDataFrame"] div[role="cell"] {{
+    border-bottom: 1px solid #222222 !important;
 }}
 
 /* Buttons */
@@ -171,7 +183,7 @@ h3, h4 {{
     box-shadow: 0 0 18px {accent};
 }}
 
-/* QQQ indicator box in top-right corner */
+/* QQQ indicator box (CSS kept, but we don't render it anymore) */
 .qqq-indicator {{
     position: fixed;
     top: 12px;
@@ -366,9 +378,9 @@ def get_stock_summary(tickers):
 with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
-
 if not df.empty:
-    st.table(df)
+    # st.table(df)  # old version – bad on phone
+    st.dataframe(df, use_container_width=True, height=600)
 else:
     st.write("No data loaded.")
 
