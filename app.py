@@ -46,13 +46,13 @@ def get_qqq_status():
 
 qqq_mode, qqq_price, qqq_change, qqq_change_pct, qqq_arrow = get_qqq_status()
 
-# Accent color based on QQQ
+# Softer accent color based on QQQ
 if qqq_mode == "green":
-    accent = "#00ff99"   # neon green
+    accent = "#22c55e"   # softer emerald green
 elif qqq_mode == "red":
-    accent = "#ff3366"   # neon red
+    accent = "#ef4444"   # soft red
 else:
-    accent = "#00eaff"   # neon cyan
+    accent = "#0ea5e9"   # cyan/blue
 
 
 # -------------- CYBERPUNK CSS ------------------
@@ -77,11 +77,11 @@ html, body, [class*="css"] {{
     background-color: #000000 !important;
 }}
 
-/* Headings with neon pulse */
+/* Headings with soft neon pulse */
 h1, h2 {{
     color: {accent} !important;
-    text-shadow: 0 0 6px {accent}, 0 0 12px {accent};
-    animation: neonPulse 2.5s ease-in-out infinite;
+    text-shadow: 0 0 4px {accent}, 0 0 10px {accent};
+    animation: neonPulse 3s ease-in-out infinite;
 }}
 
 h3, h4 {{
@@ -93,7 +93,7 @@ h3, h4 {{
         text-shadow: 0 0 4px {accent}, 0 0 8px {accent};
     }}
     50% {{
-        text-shadow: 0 0 14px {accent}, 0 0 28px {accent};
+        text-shadow: 0 0 12px {accent}, 0 0 22px {accent};
     }}
     100% {{
         text-shadow: 0 0 4px {accent}, 0 0 8px {accent};
@@ -107,8 +107,8 @@ h3, h4 {{
     border-right: 2px solid {accent}22;
 }}
 
-/* Dataframe outer container: neon frame */
-[data-testid="stDataFrame"] {{
+/* Table outer container: neon frame */
+[data-testid="stTable"] {{
     border: 1px solid {accent}aa !important;
     box-shadow: 0 0 25px {accent}55;
     border-radius: 10px;
@@ -116,10 +116,44 @@ h3, h4 {{
     background-color: #000000 !important;
 }}
 
-/* Table rows hover tint (extra, Styler handles base colors) */
-[data-testid="stDataFrame"] table tbody tr:hover {{
+/* Actual HTML table */
+[data-testid="stTable"] table {{
+    width: 100%;
+    border-collapse: collapse !important;
+    background-color: #050505 !important;
+    color: #ffffff !important;
+    font-size: 0.9rem;
+}}
+
+/* Header row */
+[data-testid="stTable"] thead tr {{
+    background-color: #101010 !important;
+}}
+
+[data-testid="stTable"] thead th {{
+    color: {accent} !important;
+    border-bottom: 1px solid {accent}77 !important;
+    padding: 0.4rem 0.6rem !important;
+    text-align: left;
+}}
+
+/* Body rows */
+[data-testid="stTable"] tbody tr:nth-child(odd) {{
+    background-color: #090909 !important;
+}}
+
+[data-testid="stTable"] tbody tr:nth-child(even) {{
+    background-color: #141414 !important;
+}}
+
+[data-testid="stTable"] tbody td {{
+    border-bottom: 1px solid #222222 !important;
+    padding: 0.35rem 0.6rem !important;
+}}
+
+/* Row hover effect */
+[data-testid="stTable"] tbody tr:hover {{
     background-color: #1b1b1b !important;
-    box-shadow: 0 0 18px {accent};
     transition: background-color 0.12s ease-in-out;
 }}
 
@@ -198,9 +232,9 @@ if qqq_price is not None and qqq_change_pct is not None:
         f"{'Bullish' if qqq_mode=='green' else 'Bearish' if qqq_mode=='red' else 'Neutral'} market theme"
     )
 else:
-    st.subheader("QQQ data unavailable — default neutral neon theme")
+    st.subheader("QQQ data unavailable — default neutral theme")
 
-st.caption("Last updated: {}".format(pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')))
+st.caption("Last updated: {}".format(pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S")))
 
 
 # -------------- TICKERS ------------------
@@ -210,7 +244,7 @@ TOP_TECH_TICKERS = [
     "TSM", "AVGO", "ORCL", "CRM",
     "AMD", "NOW", "MU", "SNOW", "PLTR",
     "ANET", "CRWD", "PANW", "NET", "DDOG",
-    "MDB", "MRVL", "IBM", "AMKR", "SMCI"
+    "MDB", "MRVL", "IBM", "AMKR", "SMCI", "INTU", "AXON"
 ]
 
 
@@ -247,41 +281,6 @@ def format_market_cap(x):
         return f"{x/1e6:.2f}M"
     else:
         return f"{x:.0f}"
-
-
-def style_neon(df: pd.DataFrame, accent_color: str):
-    """Pandas Styler to tint RSI Zone + Value Signal and darken the table."""
-    def highlight_cols(col):
-        if col.name in ["RSI Zone", "Value Signal"]:
-            return [f"color: {accent_color}; font-weight: 600;" for _ in col]
-        else:
-            return [""] * len(col)
-
-    styler = (
-        df.style
-        .apply(highlight_cols, axis=0)
-        .set_table_styles(
-            [
-                {
-                    "selector": "th",
-                    "props": [
-                        ("background-color", "#101010"),
-                        ("color", accent_color),
-                        ("border-bottom", f"1px solid {accent_color}77"),
-                    ],
-                },
-                {
-                    "selector": "td",
-                    "props": [
-                        ("background-color", "#050505"),
-                        ("color", "#ffffff"),
-                        ("border-color", "#222222"),
-                    ],
-                },
-            ]
-        )
-    )
-    return styler
 
 
 # -------------- DATA FETCH ------------------
@@ -412,8 +411,8 @@ if not df.empty:
     df = df.sort_values("Market Cap", ascending=False)
     df["Market Cap"] = df["Market Cap"].apply(format_market_cap)
 
-    styled = style_neon(df, accent)
-    st.dataframe(styled, use_container_width=True)
+    # Static HTML table – easier to style than st.dataframe
+    st.table(df)
 else:
     st.write("No data loaded.")
 
@@ -436,7 +435,7 @@ st.markdown("""
 - ⚪ **Neutral** – No strong pattern.
 
 Theme color tracks **QQQ**:
-- Green day → neon green  
-- Red day → neon red  
-- Flat / unknown → neon cyan
+- Green day → soft green  
+- Red day → soft red  
+- Flat / unknown → cyan
 """)
