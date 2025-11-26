@@ -381,7 +381,6 @@ def get_stock_summary(tickers):
 
             rows.append({
                 "Ticker": ticker,
-                "Market Cap": market_cap,
                 "Price": f"${price:.2f}",
                 "% 5D": f"{pct_5d:.1f}%" if pct_5d is not None else "–",
                 "% 1M": f"{pct_1m:.1f}%" if pct_1m is not None else "–",
@@ -392,6 +391,7 @@ def get_stock_summary(tickers):
                 "P/E": f"{pe:.1f}" if pe is not None else "–",
                 "Fwd P/E": f"{fpe:.1f}" if fpe is not None else "–",
             })
+
 
         except Exception:
             continue
