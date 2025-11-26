@@ -5,7 +5,7 @@ from ta.momentum import RSIIndicator
 
 # -------------- CONFIG ------------------
 st.set_page_config(page_title="Tech Snapshot", layout="wide")
-st.title("🔍 Tech Stocks Snapshot Dashboard (Ranked by Market Cap)")
+st.title("🔍 AI, Infrastructure, Network, Supply chain")
 st.caption("Last updated: {}".format(pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')))
 
 # ✅ Manually ordered by market cap / your preference
@@ -14,7 +14,7 @@ TOP_TECH_TICKERS = [
     "TSM", "AVGO", "ORCL", "CRM",
     "AMD", "NOW", "MU", "SNOW", "PLTR",
     "ANET", "CRWD", "PANW", "NET", "DDOG",
-    "MDB", "MRVL", "IBM"
+    "MDB", "MRVL", "IBM", "AMKR", "SMCI"
 ]
 
 
