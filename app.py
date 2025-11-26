@@ -224,7 +224,7 @@ if qqq_price is not None and qqq_change_pct is not None:
 
 # -------------- TITLE + SUBHEADER ------------------
 
-st.title("🔍 AI, Infrastructure, Network, Supply Chain")
+st.title("Tech Leadership Monitor")
 
 if qqq_price is not None and qqq_change_pct is not None:
     st.subheader(
@@ -403,8 +403,6 @@ def get_stock_summary(tickers):
 
 with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
-
-st.subheader("📊 Pullback & Momentum Overview")
 
 if not df.empty:
     # Sort by market cap, then format
