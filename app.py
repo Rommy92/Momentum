@@ -202,26 +202,6 @@ h3, h4 {{
 st.markdown(cyberpunk_css, unsafe_allow_html=True)
 
 
-# -------------- QQQ INDICATOR BOX ------------------
-
-if qqq_price is not None and qqq_change_pct is not None:
-    mode_label = {
-        "green": "GREEN MODE",
-        "red": "RED MODE",
-        "neutral": "NEUTRAL MODE"
-    }.get(qqq_mode, "NEUTRAL MODE")
-
-    indicator_html = f"""
-    <div class="qqq-indicator">
-        <div class="qqq-indicator-mode">QQQ: {mode_label}</div>
-        <div class="qqq-indicator-price">
-            {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%)
-        </div>
-    </div>
-    """
-    st.markdown(indicator_html, unsafe_allow_html=True)
-
-
 # -------------- TITLE + SUBHEADER ------------------
 
 st.title("Tech Leadership Monitor")
