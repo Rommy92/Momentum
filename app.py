@@ -4,7 +4,7 @@ import pandas as pd
 from ta.momentum import RSIIndicator
 
 # -------------- PAGE CONFIG ------------------
-st.set_page_config(page_title="Tech Snapshot", layout="wide")
+st.set_page_config(page_title="Tech Leadership Monitor", layout="wide")
 
 
 # -------------- QQQ MODE + THEME LOGIC ------------------
@@ -100,11 +100,13 @@ h3, h4 {{
     }}
 }}
 
-/* Main content container frame */
+/* Full-width content container */
 .block-container {{
-    padding: 1rem 3rem !important;
-    border-left: 2px solid {accent}22;
-    border-right: 2px solid {accent}22;
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    padding-left: 0rem !important;
+    padding-right: 0rem !important;
+    max-width: 100% !important;
 }}
 
 /* Dark styling for st.dataframe */
@@ -146,9 +148,7 @@ st.markdown(cyberpunk_css, unsafe_allow_html=True)
 st.title("Tech Leadership Monitor")
 
 if qqq_price is not None and qqq_change_pct is not None:
-    st.subheader(
-        f"QQQ {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%) "
-    )
+    st.subheader(f"QQQ {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%)")
 else:
     st.subheader("QQQ data unavailable — default neutral theme")
 
@@ -163,7 +163,7 @@ TOP_TECH_TICKERS = [
     "AMD", "NOW", "MU", "SNOW", "PLTR",
     "ANET", "CRWD", "PANW", "NET", "DDOG",
     "MDB", "MRVL", "IBM", "AMKR", "SMCI",
-    "AXON", "INTU",
+    "AXON", "ISRG",
 ]
 
 
@@ -247,7 +247,7 @@ def get_stock_summary(tickers):
             except Exception:
                 pe = None
 
-            # Forward EPS
+            # Forward EPS (eps_trend + fallback to forwardEps)
             fpe = None
             forward_eps = None
             try:
@@ -292,18 +292,18 @@ def get_stock_summary(tickers):
                 fpe=fpe
             )
 
-            # IMPORTANT: store numeric values, no "%" signs, no "$" here
+            # Keep everything numeric where it matters (no "$" or "%" here)
             rows.append({
                 "Ticker": ticker,
-                "Price": price,                 # float
-                "% 5D": pct_5d,                 # float (%)
-                "% 1M": pct_1m,                 # float (%)
-                "% from 52w High": pct_from_52wk,  # float (%)
-                "RSI": rsi_val,                 # float
-                "RSI Zone": rsi_signal,         # text
-                "Value Signal": value_signal,   # text
-                "P/E": pe,                      # float or None
-                "Fwd P/E": fpe,                 # float or None
+                "Price": price,
+                "% 5D": pct_5d,
+                "% 1M": pct_1m,
+                "% from 52w High": pct_from_52wk,
+                "RSI": rsi_val,
+                "RSI Zone": rsi_signal,
+                "Value Signal": value_signal,
+                "P/E": pe,
+                "Fwd P/E": fpe,
             })
 
         except Exception:
@@ -318,10 +318,10 @@ with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
 if not df.empty:
-    # Use ticker as index (saves space, looks more terminal-like)
+    # Use ticker as index (saves space, more terminal-like)
     df = df.set_index("Ticker")
 
-    # Format numeric columns but keep them numeric for proper sorting
+    # Display formatting (keeps columns numeric underneath)
     format_dict = {
         "Price": "${:,.2f}",
         "% 5D": "{:.1f}%",
@@ -334,23 +334,31 @@ if not df.empty:
 
     styled = df.style.format(format_dict, na_rep="–")
 
-    # Right-align numeric columns (B) and center headers
+    # Right-align numeric columns and center headers
     numeric_cols = ["Price", "% 5D", "% 1M", "% from 52w High", "RSI", "P/E", "Fwd P/E"]
 
-    styled = styled.set_table_styles(
-        [
-            {"selector": "th.col_heading", "props": [("text-align", "center")]},
-        ],
-        overwrite=False,
-    ).set_properties(
-        subset=numeric_cols,
-        **{"text-align": "right"}
+    styled = (
+        styled.set_table_styles(
+            [{"selector": "th.col_heading", "props": [("text-align", "center")]}],
+            overwrite=False,
+        )
+        .set_properties(subset=numeric_cols, **{"text-align": "right"})
     )
 
-    # RSI highlight (D)
+    # RSI highlight (<30 green, >70 red)
     styled = styled.applymap(rsi_style, subset=["RSI"])
 
-    st.dataframe(styled, use_container_width=True, height=600)
+    # Autosize columns like clicking "Autosize" in the UI
+    column_config = {
+        col: st.column_config.Column(width="fit") for col in df.columns
+    }
+
+    st.dataframe(
+        styled,
+        use_container_width=True,
+        height=600,
+        column_config=column_config,
+    )
 else:
     st.write("No data loaded.")
 
