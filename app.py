@@ -5,10 +5,231 @@ from ta.momentum import RSIIndicator
 
 # -------------- CONFIG ------------------
 st.set_page_config(page_title="Tech Snapshot", layout="wide")
-st.title("🔍 AI, Infrastructure, Network, Supply chain")
+
+# ------------ QQQ MODE + THEME LOGIC ------------
+
+def get_qqq_status():
+    """
+    Fetch last 2 days of QQQ and decide:
+    - mode: 'green', 'red', 'neutral'
+    - price: latest close
+    - change: absolute change vs previous close
+    - change_pct: percentage change
+    - arrow: '▲' / '▼' / '▶'
+    """
+    try:
+        hist = yf.Ticker("QQQ").history(period="2d")
+        closes = hist["Close"].dropna()
+        if len(closes) < 2:
+            return "neutral", None, None, None, "▶"
+
+        prev_price = float(closes.iloc[-2])
+        price = float(closes.iloc[-1])
+        change = price - prev_price
+        change_pct = (change / prev_price) * 100 if prev_price != 0 else 0.0
+
+        if change > 0:
+            mode = "green"
+            arrow = "▲"
+        elif change < 0:
+            mode = "red"
+            arrow = "▼"
+        else:
+            mode = "neutral"
+            arrow = "▶"
+
+        return mode, price, change, change_pct, arrow
+    except Exception:
+        return "neutral", None, None, None, "▶"
+
+
+qqq_mode, qqq_price, qqq_change, qqq_change_pct, qqq_arrow = get_qqq_status()
+
+# Accent color based on QQQ
+if qqq_mode == "green":
+    accent = "#00ff99"   # neon green
+elif qqq_mode == "red":
+    accent = "#ff3366"   # neon red
+else:
+    accent = "#00eaff"   # neon cyan
+
+# ------------- CYBERPUNK / NEON CSS -------------
+cyberpunk_css = f"""
+<style>
+/* App + sidebar background */
+[data-testid="stAppViewContainer"] {{
+    background-color: #000000 !important;
+    color: #eeeeee !important;
+}}
+
+[data-testid="stSidebar"] {{
+    background-color: #000000 !important;
+    color: #eeeeee !important;
+    border-right: 1px solid {accent}33 !important;
+}}
+
+/* Global text */
+html, body, [class*="css"] {{
+    color: #eeeeee !important;
+    background-color: #000000 !important;
+}}
+
+/* Headings with neon pulse */
+h1, h2 {{
+    color: {accent} !important;
+    text-shadow: 0 0 6px {accent}, 0 0 12px {accent};
+    animation: neonPulse 2.5s ease-in-out infinite;
+}}
+
+h3, h4 {{
+    color: {accent} !important;
+}}
+
+@keyframes neonPulse {{
+    0% {{
+        text-shadow: 0 0 4px {accent}, 0 0 8px {accent};
+    }}
+    50% {{
+        text-shadow: 0 0 14px {accent}, 0 0 28px {accent};
+    }}
+    100% {{
+        text-shadow: 0 0 4px {accent}, 0 0 8px {accent};
+    }}
+}}
+
+/* Main content container frame */
+.block-container {{
+    padding: 1rem 3rem !important;
+    border-left: 2px solid {accent}22;
+    border-right: 2px solid {accent}22;
+}}
+
+/* Dataframe container */
+[data-testid="stDataFrame"] {{
+    border: 1px solid {accent}66 !important;
+    box-shadow: 0 0 25px {accent}55;
+    border-radius: 10px;
+    overflow: hidden;
+}}
+
+/* Table background */
+[data-testid="stDataFrame"] div {{
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}}
+
+/* Table rows */
+[data-testid="stDataFrame"] table tbody tr:nth-child(odd) {{
+    background-color: #0b0b0b !important;
+}}
+
+[data-testid="stDataFrame"] table tbody tr:nth-child(even) {{
+    background-color: #141414 !important;
+}}
+
+/* Table row hover effect */
+[data-testid="stDataFrame"] table tbody tr:hover {{
+    background-color: #191919 !important;
+    box-shadow: 0 0 18px {accent};
+    transition: background-color 0.15s ease-in-out;
+}}
+
+/* Header row */
+[data-testid="stDataFrame"] table thead tr {{
+    background-color: #151515 !important;
+}}
+
+[data-testid="stDataFrame"] table thead tr th {{
+    color: {accent} !important;
+    text-shadow: 0 0 6px {accent};
+}}
+
+/* Tint RSI Zone (8th col) + Value Signal (9th col) with accent */
+[data-testid="stDataFrame"] table thead tr th:nth-child(8),
+[data-testid="stDataFrame"] table tbody tr td:nth-child(8),
+[data-testid="stDataFrame"] table thead tr th:nth-child(9),
+[data-testid="stDataFrame"] table tbody tr td:nth-child(9) {{
+    color: {accent} !important;
+    font-weight: 600 !important;
+}}
+
+/* Buttons */
+.stButton>button {{
+    background-color: #000000 !important;
+    border: 1px solid {accent} !important;
+    color: {accent} !important;
+    border-radius: 6px;
+    padding: 0.45rem 1.1rem;
+    box-shadow: 0 0 12px {accent}aa;
+}}
+
+.stButton>button:hover {{
+    background-color: {accent}22 !important;
+    box-shadow: 0 0 18px {accent};
+}}
+
+/* QQQ indicator box in top-right corner */
+.qqq-indicator {{
+    position: fixed;
+    top: 12px;
+    right: 24px;
+    z-index: 9999;
+    background: #050505;
+    border: 1px solid {accent};
+    box-shadow: 0 0 18px {accent}aa;
+    border-radius: 8px;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.8rem;
+    font-family: monospace;
+}}
+
+.qqq-indicator-mode {{
+    color: {accent};
+    font-weight: 700;
+    text-transform: uppercase;
+}}
+
+.qqq-indicator-price {{
+    color: #ffffff;
+    margin-top: 0.1rem;
+}}
+
+</style>
+"""
+st.markdown(cyberpunk_css, unsafe_allow_html=True)
+
+# ------------- QQQ INDICATOR HTML -------------
+if qqq_price is not None and qqq_change_pct is not None:
+    mode_label = {
+        "green": "GREEN MODE",
+        "red": "RED MODE",
+        "neutral": "NEUTRAL MODE"
+    }.get(qqq_mode, "NEUTRAL MODE")
+
+    indicator_html = f"""
+    <div class="qqq-indicator">
+        <div class="qqq-indicator-mode">QQQ: {mode_label}</div>
+        <div class="qqq-indicator-price">
+            {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%)
+        </div>
+    </div>
+    """
+    st.markdown(indicator_html, unsafe_allow_html=True)
+
+# -------------- TITLE + QQQ HEADER --------------
+st.title("🔍 AI, Infrastructure, Network, Supply Chain")
+
+if qqq_price is not None and qqq_change_pct is not None:
+    st.subheader(
+        f"QQQ {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%) — "
+        f"{'Bullish' if qqq_mode=='green' else 'Bearish' if qqq_mode=='red' else 'Neutral'} market theme"
+    )
+else:
+    st.subheader("QQQ data unavailable — default neutral neon theme")
+
 st.caption("Last updated: {}".format(pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')))
 
-# Your tickers
+# ✅ Tickers
 TOP_TECH_TICKERS = [
     "MSFT", "AMZN", "GOOG", "NVDA", "META",
     "TSM", "AVGO", "ORCL", "CRM",
@@ -55,6 +276,7 @@ def get_stock_summary(tickers):
 
             price = float(close.iloc[-1])
 
+            # Returns
             pct_5d = (
                 round((price - float(close.iloc[-6])) / float(close.iloc[-6]) * 100, 2)
                 if len(close) >= 6 else None
@@ -70,7 +292,7 @@ def get_stock_summary(tickers):
             rsi_series = RSIIndicator(close=close).rsi()
             rsi_val = float(round(rsi_series.iloc[-1], 2))
 
-            # ---- Fundamentals ----
+            # Fundamentals
             try:
                 info = stock.get_info()
             except Exception:
@@ -79,13 +301,12 @@ def get_stock_summary(tickers):
             pe = info.get("trailingPE", None)
             try:
                 pe = float(pe)
-            except:
+            except Exception:
                 pe = None
 
-            # ----- Forward EPS (get_eps_trend) -----
+            # Forward EPS via eps_trend
             fpe = None
             forward_eps = None
-
             try:
                 eps_trend = stock.get_eps_trend()
                 if eps_trend is not None and not eps_trend.empty:
@@ -94,25 +315,27 @@ def get_stock_summary(tickers):
                         if candidate in eps_trend.index:
                             idx = candidate
                             break
-
                     if idx is not None and "current" in eps_trend.columns:
                         val = eps_trend.loc[idx, "current"]
                         if pd.notna(val):
                             forward_eps = float(val)
-            except:
+            except Exception:
                 forward_eps = None
 
-            # fallback
+            # Fallback to forwardEps if needed
             if forward_eps is None:
                 try:
-                    forward_eps = float(info.get("forwardEps"))
-                except:
+                    fe = info.get("forwardEps", None)
+                    forward_eps = float(fe) if fe is not None else None
+                except Exception:
                     forward_eps = None
 
             if forward_eps and forward_eps > 0:
-                fpe = round(price / forward_eps, 2)
+                try:
+                    fpe = round(price / forward_eps, 2)
+                except ZeroDivisionError:
+                    fpe = None
 
-            # Market Cap
             market_cap = info.get("marketCap", None)
 
             rsi_signal = (
@@ -153,15 +376,30 @@ def get_stock_summary(tickers):
 with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
-# Sort by Market Cap DESC
-df["Market Cap"] = pd.to_numeric(df["Market Cap"], errors="coerce")
-df = df.sort_values("Market Cap", ascending=False)
+# Sort by market cap
+if not df.empty:
+    df["Market Cap"] = pd.to_numeric(df["Market Cap"], errors="coerce")
+    df = df.sort_values("Market Cap", ascending=False)
 
 st.subheader("📊 Pullback & Momentum Overview")
 st.dataframe(df, use_container_width=True)
 
-# Footer
 st.markdown("---")
 st.markdown("""
-### How to read signals...
+### 📘 How to read the signals
+
+**RSI Zone (classic RSI view)**  
+- 💚 **Oversold** = RSI < 30  
+- 🟡 **Watch** = 30–50  
+- 🔵 **Trend** = 50–70  
+- 🔴 **Overbought** = RSI > 70  
+
+**Value Signal (combined value + momentum)**  
+- 💚 **Deep value pullback** – RSI washed out, far below 52-week high, reasonable forward P/E.  
+- 🟡 **Value watch** – Decent pullback + weak RSI, forward P/E not extreme.  
+- 🔵 **Momentum trend** – Positive 1M performance, RSI 50–70.  
+- 🔴 **Hot / extended** – Near highs and/or expensive P/E, or overbought RSI.  
+- ⚪ **Neutral** – No strong pattern.
+
+On red QQQ days, everything runs in **neon red**; on green days, **neon green**; flat market → **neon cyan**.
 """)
