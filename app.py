@@ -360,11 +360,11 @@ def get_stock_summary(tickers):
                 "% 5D": f"{pct_5d:.1f}%" if pct_5d is not None else "–",
                 "% 1M": f"{pct_1m:.1f}%" if pct_1m is not None else "–",
                 "% from 52w High": f"{pct_from_52wk:.1f}%" if pct_from_52wk is not None else "–",
-                "RSI": f"{rsi_val:.1f}",
+                "RSI": round(rsi_val, 1),        # keep numeric for potential sorting
                 "RSI Zone": rsi_signal,
                 "Value Signal": value_signal,
-                "P/E": f"{pe:.1f}" if pe is not None else "–",
-                "Fwd P/E": f"{fpe:.1f}" if fpe is not None else "–",
+                "P/E": round(pe, 1) if pe is not None else None,
+                "Fwd P/E": round(fpe, 1) if fpe is not None else None,
             })
 
         except Exception:
@@ -379,8 +379,17 @@ with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
 if not df.empty:
-    # st.table(df)  # old version – bad on phone
-    st.dataframe(df, use_container_width=True, height=600)
+    # use ticker as index (saves width, nicer on phone)
+    df = df.set_index("Ticker")
+
+    # style numeric columns but keep them as floats for proper sorting
+    styled = df.style.format({
+        "P/E": "{:.1f}",
+        "Fwd P/E": "{:.1f}",
+        "RSI": "{:.1f}",
+    }, na_rep="–")
+
+    st.dataframe(styled, use_container_width=True, height=600)
 else:
     st.write("No data loaded.")
 
