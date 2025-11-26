@@ -264,24 +264,10 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     if 50 <= rsi <= 70 and (pct_1m is not None and pct_1m > 0):
         return "🔵 Momentum trend"
 
-    if rsi > 70 or pct_from_high >= -5 and (fpe is not None and fpe >= 45):
+    if rsi > 70 or (pct_from_high >= -5 and (fpe is not None and fpe >= 45)):
         return "🔴 Hot / extended"
 
     return "⚪ Neutral"
-
-
-def format_market_cap(x):
-    if x is None or pd.isna(x):
-        return "–"
-    x = float(x)
-    if x >= 1e12:
-        return f"{x/1e12:.2f}T"
-    elif x >= 1e9:
-        return f"{x/1e9:.2f}B"
-    elif x >= 1e6:
-        return f"{x/1e6:.2f}M"
-    else:
-        return f"{x:.0f}"
 
 
 # -------------- DATA FETCH ------------------
@@ -363,8 +349,6 @@ def get_stock_summary(tickers):
                 except ZeroDivisionError:
                     fpe = None
 
-            market_cap = info.get("marketCap", None)
-
             rsi_signal = (
                 "💚 Oversold" if rsi_val < 30 else
                 "🟡 Watch" if rsi_val < 50 else
@@ -392,7 +376,6 @@ def get_stock_summary(tickers):
                 "Fwd P/E": f"{fpe:.1f}" if fpe is not None else "–",
             })
 
-
         except Exception:
             continue
 
@@ -404,17 +387,12 @@ def get_stock_summary(tickers):
 with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
-if not df.empty:
-    # Sort by market cap, then format
-    df["Market Cap"] = pd.to_numeric(df["Market Cap"], errors="coerce")
-    df = df.sort_values("Market Cap", ascending=False)
-    df["Market Cap"] = df["Market Cap"].apply(format_market_cap)
+st.subheader("Tech Leadership")
 
-    # Static HTML table – easier to style than st.dataframe
+if not df.empty:
     st.table(df)
 else:
     st.write("No data loaded.")
-
 
 st.markdown("---")
 st.markdown("""
@@ -432,5 +410,4 @@ st.markdown("""
 - 🔵 **Momentum trend** – Positive 1M performance, RSI 50–70.  
 - 🔴 **Hot / extended** – Near highs and/or expensive P/E, or overbought RSI.  
 - ⚪ **Neutral** – No strong pattern.
-
 """)
