@@ -8,48 +8,35 @@ st.set_page_config(page_title="Tech Snapshot", layout="wide")
 st.title("🔍 AI, Infrastructure, Network, Supply chain")
 st.caption("Last updated: {}".format(pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')))
 
-# ✅ Manually ordered by market cap / your preference
+# Your tickers
 TOP_TECH_TICKERS = [
     "MSFT", "AMZN", "GOOG", "NVDA", "META",
     "TSM", "AVGO", "ORCL", "CRM",
     "AMD", "NOW", "MU", "SNOW", "PLTR",
     "ANET", "CRWD", "PANW", "NET", "DDOG",
-    "MDB", "MRVL", "IBM", "AMKR", "SMCI", "SYM"
+    "MDB", "MRVL", "IBM", "AMKR", "SMCI"
 ]
 
 
 def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
-    """
-    Combined value + momentum signal based on:
-    - RSI
-    - % from 52-week high
-    - 1-month performance
-    - Forward P/E
-    """
     if rsi is None or pct_from_high is None:
         return "❔ Check data"
 
-    # Deep value pullback
     if rsi < 35 and pct_from_high <= -30 and (fpe is not None and fpe <= 30):
         return "💚 Deep value pullback"
 
-    # Value-ish pullback
     if rsi < 50 and pct_from_high <= -15 and (fpe is not None and fpe <= 35):
         return "🟡 Value watch"
 
-    # Strong momentum trend
     if 50 <= rsi <= 70 and (pct_1m is not None and pct_1m > 0):
         return "🔵 Momentum trend"
 
-    # Overheated / extended
     if rsi > 70 or pct_from_high >= -5 or (fpe is not None and fpe >= 45):
         return "🔴 Hot / extended"
 
-    # Everything else
     return "⚪ Neutral"
 
 
-# -------------- FETCH FUNCTION ------------------
 @st.cache_data(ttl=600)
 def get_stock_summary(tickers):
     rows = []
@@ -57,23 +44,17 @@ def get_stock_summary(tickers):
     for ticker in tickers:
         try:
             stock = yf.Ticker(ticker)
-
-            # 🔄 1-year history for 52-week logic
             hist = stock.history(period="1y")
 
             if hist.empty or "Close" not in hist.columns:
-                st.warning(f"⚠️ No price history for {ticker}, skipping.")
                 continue
 
             close = hist["Close"].dropna()
-
             if len(close) < 10:
-                st.warning(f"⚠️ Not enough data points for {ticker}, skipping.")
                 continue
 
             price = float(close.iloc[-1])
 
-            # ----- short-term performance -----
             pct_5d = (
                 round((price - float(close.iloc[-6])) / float(close.iloc[-6]) * 100, 2)
                 if len(close) >= 6 else None
@@ -83,37 +64,31 @@ def get_stock_summary(tickers):
                 if len(close) >= 22 else None
             )
 
-            # 🔥 52-week high logic
             high_52wk = float(close.max())
             pct_from_52wk = round((price - high_52wk) / high_52wk * 100, 2)
 
-            # ----- RSI -----
             rsi_series = RSIIndicator(close=close).rsi()
             rsi_val = float(round(rsi_series.iloc[-1], 2))
 
-            # ----- Fundamentals from Yahoo -----
-            # Use get_info() instead of .info property (cleaner in new yfinance)
+            # ---- Fundamentals ----
             try:
                 info = stock.get_info()
             except Exception:
                 info = {}
 
-            # Trailing P/E directly
             pe = info.get("trailingPE", None)
-            if pe is not None:
-                try:
-                    pe = float(pe)
-                except (TypeError, ValueError):
-                    pe = None
+            try:
+                pe = float(pe)
+            except:
+                pe = None
 
-            # --- Forward EPS from eps_trend (preferred) ---
+            # ----- Forward EPS (get_eps_trend) -----
             fpe = None
             forward_eps = None
 
             try:
                 eps_trend = stock.get_eps_trend()
                 if eps_trend is not None and not eps_trend.empty:
-                    # Prefer next-year EPS if available, else current-year
                     idx = None
                     for candidate in ["+1y", "0y"]:
                         if candidate in eps_trend.index:
@@ -124,24 +99,22 @@ def get_stock_summary(tickers):
                         val = eps_trend.loc[idx, "current"]
                         if pd.notna(val):
                             forward_eps = float(val)
-            except Exception:
+            except:
                 forward_eps = None
 
-            # Fallback: old forwardEps from info if eps_trend missing
+            # fallback
             if forward_eps is None:
-                fe = info.get("forwardEps", None)
                 try:
-                    forward_eps = float(fe) if fe is not None else None
-                except (TypeError, ValueError):
+                    forward_eps = float(info.get("forwardEps"))
+                except:
                     forward_eps = None
 
-            if forward_eps is not None and forward_eps > 0:
-                try:
-                    fpe = round(price / forward_eps, 2)
-                except ZeroDivisionError:
-                    fpe = None
+            if forward_eps and forward_eps > 0:
+                fpe = round(price / forward_eps, 2)
 
-            # Simple RSI label (still useful as a quick read)
+            # Market Cap
+            market_cap = info.get("marketCap", None)
+
             rsi_signal = (
                 "💚 Oversold" if rsi_val < 30 else
                 "🟡 Watch" if rsi_val < 50 else
@@ -149,7 +122,6 @@ def get_stock_summary(tickers):
                 "🔴 Overbought"
             )
 
-            # Combined value + momentum signal
             value_signal = get_value_momentum_signal(
                 rsi=rsi_val,
                 pct_from_high=pct_from_52wk,
@@ -159,6 +131,7 @@ def get_stock_summary(tickers):
 
             rows.append({
                 "Ticker": ticker,
+                "Market Cap": market_cap,
                 "Price": f"${price:.2f}",
                 "% 5D": f"{pct_5d:.1f}%" if pct_5d is not None else "–",
                 "% 1M": f"{pct_1m:.1f}%" if pct_1m is not None else "–",
@@ -170,14 +143,8 @@ def get_stock_summary(tickers):
                 "Fwd P/E": f"{fpe:.1f}" if fpe is not None else "–",
             })
 
-        except Exception as e:
-            st.warning(f"⚠️ Skipping {ticker} due to error: {e}")
-
-    if not rows:
-        return pd.DataFrame(columns=[
-            "Ticker", "Price", "% 5D", "% 1M", "% from 52w High",
-            "RSI", "RSI Zone", "Value Signal", "P/E", "Fwd P/E"
-        ])
+        except Exception:
+            continue
 
     return pd.DataFrame(rows)
 
@@ -186,30 +153,15 @@ def get_stock_summary(tickers):
 with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
-# Keep your custom order
-df["Ticker"] = pd.Categorical(df["Ticker"], categories=TOP_TECH_TICKERS, ordered=True)
-df = df.sort_values("Ticker")
+# Sort by Market Cap DESC
+df["Market Cap"] = pd.to_numeric(df["Market Cap"], errors="coerce")
+df = df.sort_values("Market Cap", ascending=False)
 
 st.subheader("📊 Pullback & Momentum Overview")
 st.dataframe(df, use_container_width=True)
 
-# -------------- FOOTER ------------------
+# Footer
 st.markdown("---")
 st.markdown("""
-### 📘 How to read the signals
-
-**RSI Zone (classic RSI view)**  
-- 💚 **Buy** = RSI < 30 (oversold)  
-- 🟡 **Watch** = 30–50 (weak, potential base)  
-- 🔵 **Trend** = 50–70 (healthy uptrend)  
-- 🔴 **Overbought** = RSI > 70 (stretched short term)  
-
-**Value Signal (combined value + momentum)**  
-- 💚 **Deep value pullback** – RSI washed out, price far below its 52-week high, and forward P/E not extreme.  
-- 🟡 **Value watch** – Decent pullback and weak RSI, with reasonable forward P/E.  
-- 🔵 **Momentum trend** – Positive 1M performance with mid-range RSI (50–70).  
-- 🔴 **Hot / extended** – Near 52-week highs and/or expensive on forward P/E, or overbought RSI.  
-- ⚪ **Neutral** – No strong value or momentum pattern detected.
-
-**📈 Idea:** Focus on 💚 / 🟡 names for pullbacks and 🔵 for trend-following. Treat 🔴 as caution / trim zone.
+### How to read signals...
 """)
