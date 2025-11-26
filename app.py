@@ -46,9 +46,9 @@ def get_qqq_status():
 
 qqq_mode, qqq_price, qqq_change, qqq_change_pct, qqq_arrow = get_qqq_status()
 
-# Softer accent color based on QQQ
+# Accent color based on QQQ (green = NVIDIA green)
 if qqq_mode == "green":
-    accent = "#22c55e"   # softer emerald green
+    accent = "#76B900"   # NVIDIA green
 elif qqq_mode == "red":
     accent = "#ef4444"   # soft red
 else:
@@ -77,7 +77,7 @@ html, body, [class*="css"] {{
     background-color: #000000 !important;
 }}
 
-/* Headings with soft neon pulse */
+/* Headings with soft glow */
 h1, h2 {{
     color: {accent} !important;
     text-shadow: 0 0 4px {accent}, 0 0 10px {accent};
@@ -237,7 +237,6 @@ else:
 st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
-
 # -------------- TICKERS ------------------
 
 TOP_TECH_TICKERS = [
@@ -245,7 +244,8 @@ TOP_TECH_TICKERS = [
     "TSM", "AVGO", "ORCL", "CRM",
     "AMD", "NOW", "MU", "SNOW", "PLTR",
     "ANET", "CRWD", "PANW", "NET", "DDOG",
-    "MDB", "MRVL", "IBM", "AMKR", "SMCI", "INTU", "AXON"
+    "MDB", "MRVL", "IBM", "AMKR", "SMCI",
+    "AXON", "INTU",
 ]
 
 
@@ -264,7 +264,7 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     if 50 <= rsi <= 70 and (pct_1m is not None and pct_1m > 0):
         return "🔵 Momentum trend"
 
-    if rsi > 70 or pct_from_high >= -5 or (fpe is not None and fpe >= 45):
+    if rsi > 70 or pct_from_high >= -5 and (fpe is not None and fpe >= 45):
         return "🔴 Hot / extended"
 
     return "⚪ Neutral"
@@ -435,8 +435,4 @@ st.markdown("""
 - 🔴 **Hot / extended** – Near highs and/or expensive P/E, or overbought RSI.  
 - ⚪ **Neutral** – No strong pattern.
 
-Theme color tracks **QQQ**:
-- Green day → soft green  
-- Red day → soft red  
-- Flat / unknown → cyan
 """)
