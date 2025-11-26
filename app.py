@@ -104,47 +104,58 @@ h3, h4 {{
     border-right: 2px solid {accent}22;
 }}
 
-/* Dataframe container */
+/* Dataframe outer container: neon frame */
 [data-testid="stDataFrame"] {{
-    border: 1px solid {accent}66 !important;
+    border: 1px solid {accent}aa !important;
     box-shadow: 0 0 25px {accent}55;
     border-radius: 10px;
-    overflow: hidden;
-}}
-
-/* Table background */
-[data-testid="stDataFrame"] div {{
+    padding: 4px;
     background-color: #000000 !important;
-    color: #ffffff !important;
 }}
 
-/* Table rows */
+/* Actual table */
+[data-testid="stDataFrame"] table {{
+    width: 100%;
+    border-collapse: collapse !important;
+    background-color: #050505 !important;
+    color: #ffffff !important;
+    font-size: 0.9rem;
+}}
+
+/* Header row */
+[data-testid="stDataFrame"] table thead tr {{
+    background-color: #101010 !important;
+}}
+
+[data-testid="stDataFrame"] table thead th {{
+    color: {accent} !important;
+    border-bottom: 1px solid {accent}77 !important;
+    padding: 0.4rem 0.6rem !important;
+    text-shadow: 0 0 6px {accent};
+}}
+
+/* Body rows */
 [data-testid="stDataFrame"] table tbody tr:nth-child(odd) {{
-    background-color: #0b0b0b !important;
+    background-color: #090909 !important;
 }}
 
 [data-testid="stDataFrame"] table tbody tr:nth-child(even) {{
     background-color: #141414 !important;
 }}
 
-/* Table row hover effect */
+[data-testid="stDataFrame"] table tbody td {{
+    border-bottom: 1px solid #222222 !important;
+    padding: 0.35rem 0.6rem !important;
+}}
+
+/* Row hover effect */
 [data-testid="stDataFrame"] table tbody tr:hover {{
-    background-color: #191919 !important;
+    background-color: #1b1b1b !important;
     box-shadow: 0 0 18px {accent};
-    transition: background-color 0.15s ease-in-out;
+    transition: background-color 0.12s ease-in-out;
 }}
 
-/* Header row */
-[data-testid="stDataFrame"] table thead tr {{
-    background-color: #151515 !important;
-}}
-
-[data-testid="stDataFrame"] table thead tr th {{
-    color: {accent} !important;
-    text-shadow: 0 0 6px {accent};
-}}
-
-/* Tint RSI Zone (8th col) + Value Signal (9th col) with accent */
+/* Tint RSI Zone (8th col) + Value Signal (9th col) */
 [data-testid="stDataFrame"] table thead tr th:nth-child(8),
 [data-testid="stDataFrame"] table tbody tr td:nth-child(8),
 [data-testid="stDataFrame"] table thead tr th:nth-child(9),
@@ -162,7 +173,6 @@ h3, h4 {{
     padding: 0.45rem 1.1rem;
     box-shadow: 0 0 12px {accent}aa;
 }}
-
 .stButton>button:hover {{
     background-color: {accent}22 !important;
     box-shadow: 0 0 18px {accent};
@@ -198,23 +208,6 @@ h3, h4 {{
 """
 st.markdown(cyberpunk_css, unsafe_allow_html=True)
 
-# ------------- QQQ INDICATOR HTML -------------
-if qqq_price is not None and qqq_change_pct is not None:
-    mode_label = {
-        "green": "GREEN MODE",
-        "red": "RED MODE",
-        "neutral": "NEUTRAL MODE"
-    }.get(qqq_mode, "NEUTRAL MODE")
-
-    indicator_html = f"""
-    <div class="qqq-indicator">
-        <div class="qqq-indicator-mode">QQQ: {mode_label}</div>
-        <div class="qqq-indicator-price">
-            {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%)
-        </div>
-    </div>
-    """
-    st.markdown(indicator_html, unsafe_allow_html=True)
 
 # -------------- TITLE + QQQ HEADER --------------
 st.title("🔍 AI, Infrastructure, Network, Supply Chain")
