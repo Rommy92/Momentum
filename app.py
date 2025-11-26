@@ -95,7 +95,7 @@ def get_stock_summary(tickers):
 
             # Simple RSI label (still useful as a quick read)
             rsi_signal = (
-                "💚 Buy" if rsi_val < 30 else
+                "💚 Oversold" if rsi_val < 30 else
                 "🟡 Watch" if rsi_val < 50 else
                 "🔵 Trend" if rsi_val < 70 else
                 "🔴 Overbought"
