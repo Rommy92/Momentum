@@ -53,45 +53,65 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
 @st.cache_data(ttl=600)
 def get_stock_summary(tickers):
     rows = []
+
     for ticker in tickers:
         try:
             stock = yf.Ticker(ticker)
+
             # 🔄 1-year history for 52-week logic
             hist = stock.history(period="1y")
-            info = stock.info
 
             if hist.empty or "Close" not in hist.columns:
                 st.warning(f"⚠️ No price history for {ticker}, skipping.")
                 continue
 
-            close = hist["Close"]
+            close = hist["Close"].dropna()
 
             if len(close) < 10:
                 st.warning(f"⚠️ Not enough data points for {ticker}, skipping.")
                 continue
 
-            price = close.iloc[-1]
+            price = float(close.iloc[-1])
 
+            # ----- short-term performance -----
             pct_5d = (
-                round((price - close.iloc[-6]) / close.iloc[-6] * 100, 2)
+                round((price - float(close.iloc[-6])) / float(close.iloc[-6]) * 100, 2)
                 if len(close) >= 6 else None
             )
             pct_1m = (
-                round((price - close.iloc[-22]) / close.iloc[-22] * 100, 2)
+                round((price - float(close.iloc[-22])) / float(close.iloc[-22]) * 100, 2)
                 if len(close) >= 22 else None
             )
 
             # 🔥 52-week high logic
-            high_52wk = close.max()
+            high_52wk = float(close.max())
             pct_from_52wk = round((price - high_52wk) / high_52wk * 100, 2)
 
-            # RSI
-            rsi = RSIIndicator(close=close).rsi()
-            rsi_val = round(rsi.iloc[-1], 2)
+            # ----- RSI -----
+            rsi_series = RSIIndicator(close=close).rsi()
+            rsi_val = float(round(rsi_series.iloc[-1], 2))
 
-            # Valuation
+            # ----- Fundamentals from Yahoo (info is ugly but still useful) -----
+            info = stock.info  # still the easiest way, but we don't trust forwardPE
+
+            # Trailing P/E directly
             pe = info.get("trailingPE", None)
-            fpe = info.get("forwardPE", None)
+            if pe is not None:
+                try:
+                    pe = float(pe)
+                except (TypeError, ValueError):
+                    pe = None
+
+            # Forward EPS from Yahoo, then compute forward P/E ourselves
+            forward_eps = info.get("forwardEps", None)
+            fpe = None
+            if forward_eps is not None:
+                try:
+                    forward_eps = float(forward_eps)
+                    if forward_eps > 0:
+                        fpe = round(price / forward_eps, 2)
+                except (TypeError, ValueError, ZeroDivisionError):
+                    fpe = None
 
             # Simple RSI label (still useful as a quick read)
             rsi_signal = (
@@ -125,6 +145,12 @@ def get_stock_summary(tickers):
         except Exception as e:
             st.warning(f"⚠️ Skipping {ticker} due to error: {e}")
 
+    if not rows:
+        return pd.DataFrame(columns=[
+            "Ticker", "Price", "% 5D", "% 1M", "% from 52w High",
+            "RSI", "RSI Zone", "Value Signal", "P/E", "Fwd P/E"
+        ])
+
     return pd.DataFrame(rows)
 
 
@@ -132,6 +158,7 @@ def get_stock_summary(tickers):
 with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
+# Keep your custom order
 df["Ticker"] = pd.Categorical(df["Ticker"], categories=TOP_TECH_TICKERS, ordered=True)
 df = df.sort_values("Ticker")
 
