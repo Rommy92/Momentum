@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 from ta.momentum import RSIIndicator
-from matplotlib.colors import LinearSegmentedColormap
 
 # -------------- PAGE CONFIG ------------------
 st.set_page_config(page_title="Tech Leadership Monitor", layout="wide")
@@ -125,20 +124,6 @@ h3, h4 {{
 [data-testid="stDataFrame"] div[role="cell"] {{
     border-bottom: 1px solid #222222 !important;
 }}
-
-/* Buttons */
-.stButton>button {{
-    background-color: #000000 !important;
-    border: 1px solid {accent} !important;
-    color: {accent} !important;
-    border-radius: 6px;
-    padding: 0.45rem 1.1rem;
-    box-shadow: 0 0 12px {accent}aa;
-}}
-.stButton>button:hover {{
-    background-color: {accent}22 !important;
-    box-shadow: 0 0 18px {accent};
-}}
 </style>
 """
 st.markdown(cyberpunk_css, unsafe_allow_html=True)
@@ -201,10 +186,61 @@ def rsi_style(val):
     return ""
 
 
-# Red → black → green colormap for heatmaps
-heatmap_cmap = LinearSegmentedColormap.from_list(
-    "rbkgn", ["#ef4444", "#000000", "#22c55e"]
-)
+# --- heatmap helpers (pure CSS, no matplotlib) ---
+
+RED = (239, 68, 68)
+BLACK = (0, 0, 0)
+GREEN = (34, 197, 94)
+
+
+def _blend(c_from, c_to, t: float):
+    t = max(0.0, min(1.0, float(t)))
+    return tuple(
+        int(round(cf + (ct - cf) * t))
+        for cf, ct in zip(c_from, c_to)
+    )
+
+
+def _rgb_css(c):
+    return f"background-color: rgb({c[0]}, {c[1]}, {c[2]});"
+
+
+def color_tripolar(v, vmin, vmax):
+    """
+    Red -> Black -> Green around 0.
+    vmin <= v <= vmax, usually vmin<0<vmax.
+    """
+    if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
+        return ""
+    v = float(v)
+    mid = 0.0
+
+    if v < mid:
+        # vmin (most negative) -> RED, 0 -> BLACK
+        if vmin >= mid:
+            return ""
+        t = (v - mid) / (vmin - mid)  # in [0,1]
+        col = _blend(BLACK, RED, t)
+    else:
+        # 0 -> BLACK, vmax -> GREEN
+        if vmax <= mid:
+            return ""
+        t = (v - mid) / (vmax - mid)  # in [0,1]
+        col = _blend(BLACK, GREEN, t)
+
+    return _rgb_css(col)
+
+
+def color_bipolar(v, vmin, vmax):
+    """
+    Red -> Green, used for % from 52w High (vmin negative, vmax ~0).
+    """
+    if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
+        return ""
+    v = float(v)
+    t = (v - vmin) / (vmax - vmin)  # maps vmin->0, vmax->1
+    col = _blend(RED, GREEN, t)
+    return _rgb_css(col)
 
 
 # -------------- DATA FETCH ------------------
@@ -324,7 +360,7 @@ with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
 if not df.empty:
-    # Use ticker as index — index column is effectively "frozen" when horizontal scrolling
+    # Use ticker as index — index is effectively "frozen" when horizontal scrolling
     df = df.set_index("Ticker")
 
     # Formatting (keeps underlying data numeric)
@@ -344,26 +380,30 @@ if not df.empty:
     pct_cols = ["% 5D", "% 1M"]
     dist_col = "% from 52w High"
 
-    # Symmetric range around 0 for % 5D / % 1M
-    max_abs_change = max(
-        abs(df[pct_cols].min().min()),
-        abs(df[pct_cols].max().max())
-    )
-    styled = styled.background_gradient(
-        cmap=heatmap_cmap,
-        subset=pct_cols,
-        vmin=-max_abs_change,
-        vmax=max_abs_change,
-    )
+    # Tri-colour heatmap for % 5D / % 1M
+    for col in pct_cols:
+        if df[col].notna().any():
+            vmin = df[col].min()
+            vmax = df[col].max()
 
-    # 52w distance: values typically <= 0. 0% (near highs) should be green, deep negatives red.
+            styled = styled.apply(
+                lambda s, vmin=vmin, vmax=vmax: [
+                    color_tripolar(v, vmin, vmax) for v in s
+                ],
+                subset=[col],
+                axis=0,
+            )
+
+    # Red->green heatmap for distance from 52w high (values usually <= 0)
     if df[dist_col].notna().any():
-        min_drawdown = df[dist_col].min()  # most negative
-        styled = styled.background_gradient(
-            cmap=heatmap_cmap,
+        vmin = df[dist_col].min()
+        vmax = 0.0
+        styled = styled.apply(
+            lambda s, vmin=vmin, vmax=vmax: [
+                color_bipolar(v, vmin, vmax) for v in s
+            ],
             subset=[dist_col],
-            vmin=min_drawdown,
-            vmax=0,
+            axis=0,
         )
 
     # Right-align numeric columns and center headers
@@ -380,16 +420,10 @@ if not df.empty:
     # RSI highlight (<30 green, >70 red)
     styled = styled.applymap(rsi_style, subset=["RSI"])
 
-    # Autosize columns like clicking "Autosize" in the UI
-    column_config = {
-        col: st.column_config.Column(width="fit") for col in df.columns
-    }
-
     st.dataframe(
         styled,
         use_container_width=True,
         height=600,
-        column_config=column_config,
     )
 else:
     st.write("No data loaded.")
