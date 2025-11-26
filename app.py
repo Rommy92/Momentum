@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 from ta.momentum import RSIIndicator
+from matplotlib.colors import LinearSegmentedColormap
 
 # -------------- PAGE CONFIG ------------------
 st.set_page_config(page_title="Tech Leadership Monitor", layout="wide")
@@ -163,7 +164,7 @@ TOP_TECH_TICKERS = [
     "AMD", "NOW", "MU", "SNOW", "PLTR",
     "ANET", "CRWD", "PANW", "NET", "DDOG",
     "MDB", "MRVL", "IBM", "AMKR", "SMCI",
-    "AXON", "ISRG",
+    "AXON", "ISRG",   # INTU -> ISRG
 ]
 
 
@@ -198,6 +199,12 @@ def rsi_style(val):
     if v > 70:
         return "color: #ef4444; font-weight: 600;"  # red
     return ""
+
+
+# Red → black → green colormap for heatmaps
+heatmap_cmap = LinearSegmentedColormap.from_list(
+    "rbkgn", ["#ef4444", "#000000", "#22c55e"]
+)
 
 
 # -------------- DATA FETCH ------------------
@@ -292,7 +299,6 @@ def get_stock_summary(tickers):
                 fpe=fpe
             )
 
-            # Keep everything numeric where it matters (no "$" or "%" here)
             rows.append({
                 "Ticker": ticker,
                 "Price": price,
@@ -318,10 +324,10 @@ with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
 if not df.empty:
-    # Use ticker as index (saves space, more terminal-like)
+    # Use ticker as index — index column is effectively "frozen" when horizontal scrolling
     df = df.set_index("Ticker")
 
-    # Display formatting (keeps columns numeric underneath)
+    # Formatting (keeps underlying data numeric)
     format_dict = {
         "Price": "${:,.2f}",
         "% 5D": "{:.1f}%",
@@ -333,6 +339,32 @@ if not df.empty:
     }
 
     styled = df.style.format(format_dict, na_rep="–")
+
+    # ---- Heatmaps ----
+    pct_cols = ["% 5D", "% 1M"]
+    dist_col = "% from 52w High"
+
+    # Symmetric range around 0 for % 5D / % 1M
+    max_abs_change = max(
+        abs(df[pct_cols].min().min()),
+        abs(df[pct_cols].max().max())
+    )
+    styled = styled.background_gradient(
+        cmap=heatmap_cmap,
+        subset=pct_cols,
+        vmin=-max_abs_change,
+        vmax=max_abs_change,
+    )
+
+    # 52w distance: values typically <= 0. 0% (near highs) should be green, deep negatives red.
+    if df[dist_col].notna().any():
+        min_drawdown = df[dist_col].min()  # most negative
+        styled = styled.background_gradient(
+            cmap=heatmap_cmap,
+            subset=[dist_col],
+            vmin=min_drawdown,
+            vmax=0,
+        )
 
     # Right-align numeric columns and center headers
     numeric_cols = ["Price", "% 5D", "% 1M", "% from 52w High", "RSI", "P/E", "Fwd P/E"]
