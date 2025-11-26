@@ -11,7 +11,7 @@ st.caption("Last updated: {}".format(pd.Timestamp.now().strftime('%Y-%m-%d %H:%M
 # ✅ Manually ordered by market cap / your preference
 TOP_TECH_TICKERS = [
     "MSFT", "AMZN", "GOOG", "NVDA", "META",
-    "TSM", "AVGO", "ORCL", "NFLX", "CRM",
+    "TSM", "AVGO", "ORCL", "CRM",
     "AMD", "NOW", "MU", "SNOW", "PLTR",
     "ANET", "CRWD", "PANW", "NET", "DDOG",
     "MDB", "MRVL", "IBM"
