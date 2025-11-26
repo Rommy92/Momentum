@@ -234,7 +234,8 @@ if qqq_price is not None and qqq_change_pct is not None:
 else:
     st.subheader("QQQ data unavailable — default neutral theme")
 
-st.caption("Last updated: {}".format(pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S")))
+st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
 
 
 # -------------- TICKERS ------------------
