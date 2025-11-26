@@ -107,53 +107,7 @@ h3, h4 {{
     border-right: 2px solid {accent}22;
 }}
 
-/* --- st.table styling (kept in case you use it elsewhere) --- */
-[data-testid="stTable"] {{
-    border: 1px solid {accent}aa !important;
-    box-shadow: 0 0 25px {accent}55;
-    border-radius: 10px;
-    padding: 4px;
-    background-color: #000000 !important;
-}}
-
-[data-testid="stTable"] table {{
-    width: 100%;
-    border-collapse: collapse !important;
-    background-color: #050505 !important;
-    color: #ffffff !important;
-    font-size: 0.9rem;
-}}
-
-[data-testid="stTable"] thead tr {{
-    background-color: #101010 !important;
-}}
-
-[data-testid="stTable"] thead th {{
-    color: {accent} !important;
-    border-bottom: 1px solid {accent}77 !important;
-    padding: 0.4rem 0.6rem !important;
-    text-align: left;
-}}
-
-[data-testid="stTable"] tbody tr:nth-child(odd) {{
-    background-color: #090909 !important;
-}}
-
-[data-testid="stTable"] tbody tr:nth-child(even) {{
-    background-color: #141414 !important;
-}}
-
-[data-testid="stTable"] tbody td {{
-    border-bottom: 1px solid #222222 !important;
-    padding: 0.35rem 0.6rem !important;
-}}
-
-[data-testid="stTable"] tbody tr:hover {{
-    background-color: #1b1b1b !important;
-    transition: background-color 0.12s ease-in-out;
-}}
-
-/* --- NEW: dark styling for st.dataframe (mobile-friendly) --- */
+/* Dark styling for st.dataframe */
 [data-testid="stDataFrame"] div[role="grid"] {{
     background-color: #050505 !important;
     color: #ffffff !important;
@@ -182,33 +136,6 @@ h3, h4 {{
     background-color: {accent}22 !important;
     box-shadow: 0 0 18px {accent};
 }}
-
-/* QQQ indicator box (CSS kept, but we don't render it anymore) */
-.qqq-indicator {{
-    position: fixed;
-    top: 12px;
-    right: 24px;
-    z-index: 9999;
-    background: #050505;
-    border: 1px solid {accent};
-    box-shadow: 0 0 18px {accent}aa;
-    border-radius: 8px;
-    padding: 0.4rem 0.7rem;
-    font-size: 0.8rem;
-    font-family: monospace;
-}}
-
-.qqq-indicator-mode {{
-    color: {accent};
-    font-weight: 700;
-    text-transform: uppercase;
-}}
-
-.qqq-indicator-price {{
-    color: #ffffff;
-    margin-top: 0.1rem;
-}}
-
 </style>
 """
 st.markdown(cyberpunk_css, unsafe_allow_html=True)
@@ -261,6 +188,18 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     return "⚪ Neutral"
 
 
+def rsi_style(val):
+    """CSS style for extreme RSI values."""
+    if pd.isna(val):
+        return ""
+    v = float(val)
+    if v < 30:
+        return "color: #22c55e; font-weight: 600;"  # green
+    if v > 70:
+        return "color: #ef4444; font-weight: 600;"  # red
+    return ""
+
+
 # -------------- DATA FETCH ------------------
 
 @st.cache_data(ttl=600)
@@ -308,7 +247,7 @@ def get_stock_summary(tickers):
             except Exception:
                 pe = None
 
-            # Forward EPS via eps_trend
+            # Forward EPS
             fpe = None
             forward_eps = None
             try:
@@ -326,7 +265,6 @@ def get_stock_summary(tickers):
             except Exception:
                 forward_eps = None
 
-            # Fallback to forwardEps if needed
             if forward_eps is None:
                 try:
                     fe = info.get("forwardEps", None)
@@ -354,17 +292,18 @@ def get_stock_summary(tickers):
                 fpe=fpe
             )
 
+            # IMPORTANT: store numeric values, no "%" signs, no "$" here
             rows.append({
                 "Ticker": ticker,
-                "Price": f"${price:.2f}",
-                "% 5D": f"{pct_5d:.1f}%" if pct_5d is not None else "–",
-                "% 1M": f"{pct_1m:.1f}%" if pct_1m is not None else "–",
-                "% from 52w High": f"{pct_from_52wk:.1f}%" if pct_from_52wk is not None else "–",
-                "RSI": round(rsi_val, 1),        # keep numeric for potential sorting
-                "RSI Zone": rsi_signal,
-                "Value Signal": value_signal,
-                "P/E": round(pe, 1) if pe is not None else None,
-                "Fwd P/E": round(fpe, 1) if fpe is not None else None,
+                "Price": price,                 # float
+                "% 5D": pct_5d,                 # float (%)
+                "% 1M": pct_1m,                 # float (%)
+                "% from 52w High": pct_from_52wk,  # float (%)
+                "RSI": rsi_val,                 # float
+                "RSI Zone": rsi_signal,         # text
+                "Value Signal": value_signal,   # text
+                "P/E": pe,                      # float or None
+                "Fwd P/E": fpe,                 # float or None
             })
 
         except Exception:
@@ -379,36 +318,45 @@ with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
 if not df.empty:
+    # Use ticker as index (saves space, looks more terminal-like)
     df = df.set_index("Ticker")
 
-    styled = df.style.format({
+    # Format numeric columns but keep them numeric for proper sorting
+    format_dict = {
+        "Price": "${:,.2f}",
+        "% 5D": "{:.1f}%",
+        "% 1M": "{:.1f}%",
+        "% from 52w High": "{:.1f}%",
+        "RSI": "{:.1f}",
         "P/E": "{:.1f}",
         "Fwd P/E": "{:.1f}",
-        "RSI": "{:.1f}",
-    }, na_rep="–")
+    }
 
-    # -------- NEW: Center all headers & cells --------
+    styled = df.style.format(format_dict, na_rep="–")
+
+    # Right-align numeric columns (B) and center headers
+    numeric_cols = ["Price", "% 5D", "% 1M", "% from 52w High", "RSI", "P/E", "Fwd P/E"]
+
     styled = styled.set_table_styles(
         [
-            {"selector": "th", "props": [("text-align", "center")]},
-            {"selector": "td", "props": [("text-align", "center")]},
+            {"selector": "th.col_heading", "props": [("text-align", "center")]},
         ],
-        overwrite=False
+        overwrite=False,
+    ).set_properties(
+        subset=numeric_cols,
+        **{"text-align": "right"}
     )
 
-    # -------- NEW: Auto column width --------
-    st.dataframe(
-        styled,
-        use_container_width=True,
-        height=600,
-        column_config={col: st.column_config.Column(width="fit") for col in df.columns}
-    )
+    # RSI highlight (D)
+    styled = styled.applymap(rsi_style, subset=["RSI"])
+
+    st.dataframe(styled, use_container_width=True, height=600)
 else:
     st.write("No data loaded.")
 
-
 st.markdown("---")
 st.markdown("""
+### 📘 How to read the signals
 
 **RSI Zone (classic RSI view)**  
 - 💚 **Oversold** = RSI < 30  
