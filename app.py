@@ -3,10 +3,11 @@ import yfinance as yf
 import pandas as pd
 from ta.momentum import RSIIndicator
 
-# -------------- CONFIG ------------------
+# -------------- PAGE CONFIG ------------------
 st.set_page_config(page_title="Tech Snapshot", layout="wide")
 
-# ------------ QQQ MODE + THEME LOGIC ------------
+
+# -------------- QQQ MODE + THEME LOGIC ------------------
 
 def get_qqq_status():
     """
@@ -53,7 +54,9 @@ elif qqq_mode == "red":
 else:
     accent = "#00eaff"   # neon cyan
 
-# ------------- CYBERPUNK / NEON CSS -------------
+
+# -------------- CYBERPUNK CSS ------------------
+
 cyberpunk_css = f"""
 <style>
 /* App + sidebar background */
@@ -113,55 +116,11 @@ h3, h4 {{
     background-color: #000000 !important;
 }}
 
-/* Actual table */
-[data-testid="stDataFrame"] table {{
-    width: 100%;
-    border-collapse: collapse !important;
-    background-color: #050505 !important;
-    color: #ffffff !important;
-    font-size: 0.9rem;
-}}
-
-/* Header row */
-[data-testid="stDataFrame"] table thead tr {{
-    background-color: #101010 !important;
-}}
-
-[data-testid="stDataFrame"] table thead th {{
-    color: {accent} !important;
-    border-bottom: 1px solid {accent}77 !important;
-    padding: 0.4rem 0.6rem !important;
-    text-shadow: 0 0 6px {accent};
-}}
-
-/* Body rows */
-[data-testid="stDataFrame"] table tbody tr:nth-child(odd) {{
-    background-color: #090909 !important;
-}}
-
-[data-testid="stDataFrame"] table tbody tr:nth-child(even) {{
-    background-color: #141414 !important;
-}}
-
-[data-testid="stDataFrame"] table tbody td {{
-    border-bottom: 1px solid #222222 !important;
-    padding: 0.35rem 0.6rem !important;
-}}
-
-/* Row hover effect */
+/* Table rows hover tint (extra, Styler handles base colors) */
 [data-testid="stDataFrame"] table tbody tr:hover {{
     background-color: #1b1b1b !important;
     box-shadow: 0 0 18px {accent};
     transition: background-color 0.12s ease-in-out;
-}}
-
-/* Tint RSI Zone (8th col) + Value Signal (9th col) */
-[data-testid="stDataFrame"] table thead tr th:nth-child(8),
-[data-testid="stDataFrame"] table tbody tr td:nth-child(8),
-[data-testid="stDataFrame"] table thead tr th:nth-child(9),
-[data-testid="stDataFrame"] table tbody tr td:nth-child(9) {{
-    color: {accent} !important;
-    font-weight: 600 !important;
 }}
 
 /* Buttons */
@@ -209,7 +168,28 @@ h3, h4 {{
 st.markdown(cyberpunk_css, unsafe_allow_html=True)
 
 
-# -------------- TITLE + QQQ HEADER --------------
+# -------------- QQQ INDICATOR BOX ------------------
+
+if qqq_price is not None and qqq_change_pct is not None:
+    mode_label = {
+        "green": "GREEN MODE",
+        "red": "RED MODE",
+        "neutral": "NEUTRAL MODE"
+    }.get(qqq_mode, "NEUTRAL MODE")
+
+    indicator_html = f"""
+    <div class="qqq-indicator">
+        <div class="qqq-indicator-mode">QQQ: {mode_label}</div>
+        <div class="qqq-indicator-price">
+            {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%)
+        </div>
+    </div>
+    """
+    st.markdown(indicator_html, unsafe_allow_html=True)
+
+
+# -------------- TITLE + SUBHEADER ------------------
+
 st.title("🔍 AI, Infrastructure, Network, Supply Chain")
 
 if qqq_price is not None and qqq_change_pct is not None:
@@ -222,7 +202,9 @@ else:
 
 st.caption("Last updated: {}".format(pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')))
 
-# ✅ Tickers
+
+# -------------- TICKERS ------------------
+
 TOP_TECH_TICKERS = [
     "MSFT", "AMZN", "GOOG", "NVDA", "META",
     "TSM", "AVGO", "ORCL", "CRM",
@@ -231,6 +213,8 @@ TOP_TECH_TICKERS = [
     "MDB", "MRVL", "IBM", "AMKR", "SMCI"
 ]
 
+
+# -------------- HELPERS ------------------
 
 def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     if rsi is None or pct_from_high is None:
@@ -251,6 +235,57 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     return "⚪ Neutral"
 
 
+def format_market_cap(x):
+    if x is None or pd.isna(x):
+        return "–"
+    x = float(x)
+    if x >= 1e12:
+        return f"{x/1e12:.2f}T"
+    elif x >= 1e9:
+        return f"{x/1e9:.2f}B"
+    elif x >= 1e6:
+        return f"{x/1e6:.2f}M"
+    else:
+        return f"{x:.0f}"
+
+
+def style_neon(df: pd.DataFrame, accent_color: str):
+    """Pandas Styler to tint RSI Zone + Value Signal and darken the table."""
+    def highlight_cols(col):
+        if col.name in ["RSI Zone", "Value Signal"]:
+            return [f"color: {accent_color}; font-weight: 600;" for _ in col]
+        else:
+            return [""] * len(col)
+
+    styler = (
+        df.style
+        .apply(highlight_cols, axis=0)
+        .set_table_styles(
+            [
+                {
+                    "selector": "th",
+                    "props": [
+                        ("background-color", "#101010"),
+                        ("color", accent_color),
+                        ("border-bottom", f"1px solid {accent_color}77"),
+                    ],
+                },
+                {
+                    "selector": "td",
+                    "props": [
+                        ("background-color", "#050505"),
+                        ("color", "#ffffff"),
+                        ("border-color", "#222222"),
+                    ],
+                },
+            ]
+        )
+    )
+    return styler
+
+
+# -------------- DATA FETCH ------------------
+
 @st.cache_data(ttl=600)
 def get_stock_summary(tickers):
     rows = []
@@ -269,7 +304,6 @@ def get_stock_summary(tickers):
 
             price = float(close.iloc[-1])
 
-            # Returns
             pct_5d = (
                 round((price - float(close.iloc[-6])) / float(close.iloc[-6]) * 100, 2)
                 if len(close) >= 6 else None
@@ -366,16 +400,23 @@ def get_stock_summary(tickers):
 
 
 # -------------- MAIN DISPLAY ------------------
+
 with st.spinner("📡 Fetching data..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
-# Sort by market cap
+st.subheader("📊 Pullback & Momentum Overview")
+
 if not df.empty:
+    # Sort by market cap, then format
     df["Market Cap"] = pd.to_numeric(df["Market Cap"], errors="coerce")
     df = df.sort_values("Market Cap", ascending=False)
+    df["Market Cap"] = df["Market Cap"].apply(format_market_cap)
 
-st.subheader("📊 Pullback & Momentum Overview")
-st.dataframe(df, use_container_width=True)
+    styled = style_neon(df, accent)
+    st.dataframe(styled, use_container_width=True)
+else:
+    st.write("No data loaded.")
+
 
 st.markdown("---")
 st.markdown("""
@@ -394,5 +435,8 @@ st.markdown("""
 - 🔴 **Hot / extended** – Near highs and/or expensive P/E, or overbought RSI.  
 - ⚪ **Neutral** – No strong pattern.
 
-On red QQQ days, everything runs in **neon red**; on green days, **neon green**; flat market → **neon cyan**.
+Theme color tracks **QQQ**:
+- Green day → neon green  
+- Red day → neon red  
+- Flat / unknown → neon cyan
 """)
