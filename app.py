@@ -445,7 +445,7 @@ def make_styled_table(df: pd.DataFrame):
     for col in df_display.columns:
         if col in ["P/E", "Fwd P/E"]:
             # half again vs before
-            column_config[col] = st.column_config.Column(width=55)
+            column_config[col] = st.column_config.Column(width=550)
         elif col in ["Price", "% 5D", "% 1M"]:
             column_config[col] = st.column_config.Column(width=70)
         elif col == "% from 52w High":
