@@ -5,39 +5,70 @@ import datetime as dt
 from ta.momentum import RSIIndicator
 
 # -------------- PAGE CONFIG ------------------
-st.set_page_config(page_title="Tech Leadership Monitor", layout="wide")
+st.set_page_config(
+    page_title="Tech Leadership Monitor",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
-
-# -------------- TICKER STATUS + SESSION LOGIC ------------------
-
-
-def get_ticker_status(symbol: str, allow_single: bool = False):
+# Small hint to show sidebar exists
+st.markdown(
     """
-    Return (mode, price, change, change_pct, arrow) for a ticker.
+    <style>
+    .sidebar-hint {
+        position: fixed;
+        top: 0.5rem;
+        left: 0.5rem;
+        z-index: 999;
+        background: rgba(15,23,42,0.9);
+        padding: 0.25rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        color: #a5f3fc;
+        border: 1px solid #22c55e55;
+    }
+    @media (max-width: 768px) {
+        .sidebar-hint { display: none; }
+    }
+    </style>
+    <div class="sidebar-hint">🟢 Open filters in sidebar ⟵</div>
+    """,
+    unsafe_allow_html=True,
+)
 
-    mode: 'green', 'red', 'neutral'
-    arrow: ▲ / ▼ / ▶
+
+# -------------- REALTIME TICKER STATUS ------------------
+
+
+@st.cache_data(ttl=60)
+def get_ticker_status(symbol: str):
+    """
+    Realtime-like status using:
+      - prev_close from daily bars
+      - latest price from 1m intraday with pre/post
+    Returns (mode, price, change, change_pct, arrow).
     """
     try:
-        hist = yf.Ticker(symbol).history(period="2d")
-        closes = hist["Close"].dropna()
+        t = yf.Ticker(symbol)
 
-        # No data at all
+        # Previous close (last daily close)
+        daily = t.history(period="1d")
+        closes = daily.get("Close", pd.Series(dtype=float)).dropna()
         if len(closes) == 0:
             return "neutral", None, None, None, "▶"
 
-        # Only one close – can happen with futures
-        if len(closes) == 1:
-            if not allow_single:
-                return "neutral", None, None, None, "▶"
-            price = float(closes.iloc[-1])
-            return "neutral", price, 0.0, 0.0, "▶"
+        prev_close = float(closes.iloc[-1])
 
-        # Normal 2-day case
-        prev_price = float(closes.iloc[-2])
-        price = float(closes.iloc[-1])
-        change = price - prev_price
-        change_pct = (change / prev_price) * 100 if prev_price != 0 else 0.0
+        # Latest price including pre/post
+        intra = t.history(period="1d", interval="1m", prepost=True)
+        intra_closes = intra.get("Close", pd.Series(dtype=float)).dropna()
+        if len(intra_closes) > 0:
+            price = float(intra_closes.iloc[-1])
+        else:
+            price = prev_close
+
+        change = price - prev_close
+        change_pct = (change / prev_close) * 100 if prev_close != 0 else 0.0
 
         if change > 0:
             mode = "green"
@@ -58,7 +89,6 @@ def get_ticker_status(symbol: str, allow_single: bool = False):
 def is_regular_trading_hours():
     """
     US market cash session: Mon–Fri, 09:30–16:00 US/Eastern.
-    Outside of this, we treat it as 'futures hours'.
     """
     now_et = pd.Timestamp.now(tz="US/Eastern")
     if now_et.weekday() >= 5:  # 5=Sat, 6=Sun
@@ -69,39 +99,17 @@ def is_regular_trading_hours():
     return start <= t <= end
 
 
-# Fetch QQQ and NQ futures
+# Main market driver: QQQ vs NQ futures
 qqq_mode, qqq_price, qqq_change, qqq_change_pct, qqq_arrow = get_ticker_status("QQQ")
-fut_mode, fut_price, fut_change, fut_change_pct, fut_arrow = get_ticker_status(
-    "NQ=F", allow_single=True
-)
+fut_mode, fut_price, fut_change, fut_change_pct, fut_arrow = get_ticker_status("NQ=F")
 
-# SMH status
-smh_mode, smh_price, smh_change, smh_change_pct, smh_arrow = get_ticker_status("SMH")
-
-# Macro / sector ETFs for the strip
-MACRO_ETFS = [
-    ("ARKK", "High-Beta Growth"),
-    ("XLK", "Tech"),
-    ("XLF", "Financials"),
-    ("XLE", "Energy"),
-    ("TLT", "Bonds"),
-    ("UUP", "US Dollar"),
-]
-
-macro_status = {}
-for t, label in MACRO_ETFS:
-    macro_status[t] = get_ticker_status(t)
-
-# Decide which one is "active" (drives theme/header)
 if is_regular_trading_hours() or fut_price is None:
-    # Cash hours OR futures unavailable → use QQQ
     active_label = "QQQ"
     active_mode = qqq_mode
     active_price = qqq_price
     active_change_pct = qqq_change_pct
     active_arrow = qqq_arrow
 else:
-    # Futures hours → NQ=F powers theme + header, but we call it QQQ Futures
     active_label = "QQQ Futures"
     active_mode = fut_mode
     active_price = fut_price
@@ -122,7 +130,6 @@ else:
 
 cyberpunk_css = f"""
 <style>
-/* App + sidebar background */
 [data-testid="stAppViewContainer"] {{
     background-color: #000000 !important;
     color: #eeeeee !important;
@@ -134,13 +141,11 @@ cyberpunk_css = f"""
     border-right: 1px solid {accent}33 !important;
 }}
 
-/* Global text */
 html, body, [class*="css"] {{
     color: #eeeeee !important;
     background-color: #000000 !important;
 }}
 
-/* Headings with soft glow */
 h1, h2 {{
     color: {accent} !important;
     text-shadow: 0 0 4px {accent}, 0 0 10px {accent};
@@ -163,7 +168,6 @@ h3, h4 {{
     }}
 }}
 
-/* Full-width content container */
 .block-container {{
     padding-top: 1rem !important;
     padding-bottom: 1rem !important;
@@ -172,7 +176,6 @@ h3, h4 {{
     max-width: 100% !important;
 }}
 
-/* Dark styling for st.dataframe */
 [data-testid="stDataFrame"] div[role="grid"] {{
     background-color: #050505 !important;
     color: #ffffff !important;
@@ -196,14 +199,17 @@ st.markdown(cyberpunk_css, unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("Buy-Zone Filters")
-    min_dd = st.slider(
-        "Min drawdown from 52w High (%)",
-        min_value=-80,
-        max_value=0,
-        value=-25,
+    dd_required = st.slider(
+        "Drawdown from 52w High (%)",
+        min_value=0,
+        max_value=80,
+        value=25,
         step=1,
-        help="Stocks must be at least this much below their 52-week high.",
+        help="Minimum discount from 52-week high required (move right for bigger discount).",
     )
+    # Convert to negative for comparisons with "% from 52w High"
+    min_dd = -float(dd_required)
+
     max_fpe = st.slider(
         "Max Forward P/E",
         min_value=5,
@@ -213,22 +219,21 @@ with st.sidebar:
         help="Upper limit for forward P/E in buy-zone candidates.",
     )
     only_value = st.checkbox(
-        "Only show value signals (💚 / 🟡)",
+        "Only value signals (💚 / 🟡)",
         value=False,
         help="Filter to Deep value pullback and Value watch.",
     )
     buy_universe = st.radio(
-        "Universe for Buy-Zone Candidates",
+        "Buy Zone Candidates",
         options=["Tech leaders only", "Nasdaq-100", "Both"],
         index=0,
     )
 
 
-# -------------- TITLE + MARKET REGIME HEADER ------------------
+# -------------- TITLE + HEADER ------------------
 
 st.title("Tech Leadership Monitor")
 
-# Main active driver (QQQ / QQQ Futures)
 if active_price is not None and active_change_pct is not None:
     st.subheader(
         f"{active_label} {active_arrow} {active_price:.2f} ({active_change_pct:+.2f}%)"
@@ -236,60 +241,83 @@ if active_price is not None and active_change_pct is not None:
 else:
     st.subheader(f"{active_label} data unavailable — default neutral theme")
 
-# SMH status + spread vs active driver
-if smh_price is not None and smh_change_pct is not None:
-    if active_change_pct is not None:
-        smh_spread = smh_change_pct - active_change_pct
-        smh_spread_str = f"{smh_spread:+.2f} pp vs {active_label}"
-    else:
-        smh_spread_str = "spread vs benchmark unavailable"
-
-    st.caption(
-        f"SMH {smh_arrow} {smh_price:.2f} ({smh_change_pct:+.2f}%) — {smh_spread_str}"
-    )
-
 st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-# Macro / sector strip
-cols = st.columns(len(MACRO_ETFS))
-for (ticker, label), col in zip(MACRO_ETFS, cols):
-    mode, price, _, chg_pct, arrow = macro_status[ticker]
-    with col:
-        if price is None or chg_pct is None:
+
+# -------------- MACRO / SECTOR / WORLD STRIP ------------------
+
+# Define macro & world ETFs (excluding the market card)
+MACRO_WORLD_ETFS = [
+    ("ARKK", "Disruptive Growth"),
+    ("MEME", "Meme Beta"),
+    ("SMH", "Semiconductors"),
+    ("XLF", "Financials"),
+    ("TLT", "Bonds"),
+    ("UUP", "US Dollar"),
+    ("USO", "Oil"),
+    ("GLD", "Gold"),
+    ("FXI", "China"),
+    ("EWY", "Korea"),
+    ("EWJ", "Japan"),
+    ("EWT", "Taiwan"),
+    ("VGK", "Europe"),
+    ("EWU", "UK"),
+]
+
+# Fetch statuses for all ETFs
+macro_world_status = {t: get_ticker_status(t) for t, _ in MACRO_WORLD_ETFS}
+
+# Build a combined list including the Market card at the front
+macro_cards = [("MARKET", "Market")] + MACRO_WORLD_ETFS
+
+# We'll inject the active status for MARKET manually
+card_status = dict(macro_world_status)
+card_status["MARKET"] = (active_mode, active_price, None, active_change_pct, active_arrow)
+
+st.markdown("### Macro, Sector & Global Pulse")
+
+def render_card(label, ticker, status_tuple):
+    mode, price, _, chg_pct, arrow = status_tuple
+    if price is None or chg_pct is None:
+        html = (
+            f"<div style='border:1px solid #1f2933; padding:0.5rem; "
+            f"border-radius:0.75rem; background-color:#050505;'>"
+            f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
+            f"<div style='font-weight:600; color:#9ca3af;'>{ticker} data unavailable</div>"
+            f"</div>"
+        )
+        return html
+
+    # Colour by daily move
+    if chg_pct > 0:
+        txt_color = "#22c55e"
+    elif chg_pct < 0:
+        txt_color = "#ef4444"
+    else:
+        txt_color = "#e5e5e5"
+
+    html = (
+        f"<div style='border:1px solid #1f2933; padding:0.5rem; "
+        f"border-radius:0.75rem; background-color:#050505;'>"
+        f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
+        f"<div style='font-weight:600; color:{txt_color};'>"
+        f"{ticker} {arrow} {price:.2f} ({chg_pct:+.2f}%)"
+        f"</div>"
+        f"</div>"
+    )
+    return html
+
+# Render cards in rows of 4
+cards_per_row = 4
+for i in range(0, len(macro_cards), cards_per_row):
+    row = macro_cards[i:i + cards_per_row]
+    cols = st.columns(len(row))
+    for (ticker, label), col in zip(row, cols):
+        with col:
             st.markdown(
-                f"<div style='border:1px solid #1f2933; padding:0.5rem; "
-                f"border-radius:0.5rem; background-color:#050505;'>"
-                f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
-                f"<div style='font-weight:600; color:#9ca3af;'>{ticker} data unavailable</div>"
-                f"</div>",
+                render_card(label, ticker, card_status[ticker]),
                 unsafe_allow_html=True,
             )
-        else:
-            # Colour by daily move
-            if chg_pct > 0:
-                txt_color = "#22c55e"
-            elif chg_pct < 0:
-                txt_color = "#ef4444"
-            else:
-                txt_color = "#e5e5e5"
-
-            if active_change_pct is not None:
-                spread = chg_pct - active_change_pct
-                spread_str = f"{spread:+.2f} pp vs {active_label}"
-            else:
-                spread_str = "spread vs benchmark unavailable"
-
-            col_html = (
-                f"<div style='border:1px solid #1f2933; padding:0.5rem; "
-                f"border-radius:0.5rem; background-color:#050505;'>"
-                f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
-                f"<div style='font-weight:600; color:{txt_color};'>"
-                f"{ticker} {arrow} {price:.2f} ({chg_pct:+.2f}%)"
-                f"</div>"
-                f"<div style='font-size:0.75rem; color:#9ca3af;'>{spread_str}</div>"
-                f"</div>"
-            )
-            st.markdown(col_html, unsafe_allow_html=True)
 
 
 # -------------- TICKER UNIVERSES ------------------
@@ -300,10 +328,9 @@ TOP_TECH_TICKERS = [
     "AMD", "NOW", "MU", "SNOW", "PLTR",
     "ANET", "CRWD", "PANW", "NET", "DDOG",
     "MDB", "MRVL", "IBM", "AMKR", "SMCI",
-    "AXON", "ISRG"
+    "AXON", "ISRG",
 ]
 
-# Full Nasdaq-100 list (as of late 2025)
 NASDAQ100_TICKERS = [
     "ADBE", "AMD", "ABNB", "GOOGL", "GOOG", "AMZN", "AEP", "AMGN", "ADI",
     "AAPL", "AMAT", "APP", "ARM", "ASML", "AZN", "TEAM", "ADSK", "ADP",
@@ -327,7 +354,7 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     if rsi is None or pct_from_high is None:
         return "❔ Check data"
 
-    # Allow missing Fwd P/E to still flag deep value
+    # Allow missing Fwd P/E to still flag deep value/value watch
     if rsi < 35 and pct_from_high <= -30 and (fpe is None or fpe <= 30):
         return "💚 Deep value pullback"
 
@@ -344,7 +371,6 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
 
 
 def rsi_zone_text(rsi_val: float) -> str:
-    """Return text like '73.9 – Overbought'."""
     if rsi_val < 30:
         zone = "Oversold"
     elif rsi_val < 50:
@@ -357,25 +383,21 @@ def rsi_zone_text(rsi_val: float) -> str:
 
 
 def rsi_zone_style(val):
-    """Colour RSI Zone cell based on numeric RSI inside the text."""
     if val is None:
         return ""
     try:
-        num_str = str(val).split()[0]  # "73.9 – Overbought" -> "73.9"
+        num_str = str(val).split()[0]
         rsi = float(num_str)
     except Exception:
         return ""
-
     if rsi < 30:
-        return "color: #22c55e; font-weight: 600;"  # green
+        return "color: #22c55e; font-weight: 600;"
     if rsi < 50:
-        return "color: #eab308; font-weight: 600;"  # yellow
+        return "color: #eab308; font-weight: 600;"
     if rsi < 70:
-        return "color: #3b82f6; font-weight: 600;"  # blue
-    return "color: #ef4444; font-weight: 600;"       # red
+        return "color: #3b82f6; font-weight: 600;"
+    return "color: #ef4444; font-weight: 600;"
 
-
-# --- heatmap helpers (pure CSS, no matplotlib) ---
 
 RED = (239, 68, 68)
 BLACK = (0, 0, 0)
@@ -384,10 +406,7 @@ GREEN = (34, 197, 94)
 
 def _blend(c_from, c_to, t: float):
     t = max(0.0, min(1.0, float(t)))
-    return tuple(
-        int(round(cf + (ct - cf) * t))
-        for cf, ct in zip(c_from, c_to)
-    )
+    return tuple(int(round(cf + (ct - cf) * t)) for cf, ct in zip(c_from, c_to))
 
 
 def _rgb_css(c):
@@ -395,53 +414,46 @@ def _rgb_css(c):
 
 
 def color_tripolar(v, vmin, vmax):
-    """
-    Red -> Black -> Green around 0.
-    vmin <= v <= vmax, usually vmin<0<vmax.
-    """
     if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
         return ""
     v = float(v)
     mid = 0.0
-
     if v < mid:
         if vmin >= mid:
             return ""
-        t = (v - mid) / (vmin - mid)  # in [0,1]
+        t = (v - mid) / (vmin - mid)
         col = _blend(BLACK, RED, t)
     else:
         if vmax <= mid:
             return ""
-        t = (v - mid) / (vmax - mid)  # in [0,1]
+        t = (v - mid) / (vmax - mid)
         col = _blend(BLACK, GREEN, t)
-
     return _rgb_css(col)
 
 
 def color_bipolar(v, vmin, vmax):
-    """
-    Red -> Green, used for % from 52w High (vmin negative, vmax ~0).
-    """
     if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
         return ""
     v = float(v)
-    t = (v - vmin) / (vmax - vmin)  # maps vmin->0, vmax->1
+    t = (v - vmin) / (vmax - vmin)
     col = _blend(RED, GREEN, t)
     return _rgb_css(col)
 
 
-# -------------- DATA FETCH ------------------
+# -------------- DATA FETCH FOR TABLES ------------------
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def get_stock_summary(tickers):
     rows = []
 
     for ticker in tickers:
         try:
             stock = yf.Ticker(ticker)
-            hist = stock.history(period="1y")
+            # Reuse realtime status for current price and 1D move
+            _, price_rt, _, change_pct_rt, _ = get_ticker_status(ticker)
 
+            hist = stock.history(period="1y")
             if hist.empty or "Close" not in hist.columns:
                 continue
 
@@ -449,8 +461,10 @@ def get_stock_summary(tickers):
             if len(close) < 10:
                 continue
 
-            price = float(close.iloc[-1])
+            last_close = float(close.iloc[-1])
+            price = float(price_rt) if price_rt is not None else last_close
 
+            # 5D & 1M returns use historical close as base, current realtime price as top
             pct_5d = (
                 round((price - float(close.iloc[-6])) / float(close.iloc[-6]) * 100, 2)
                 if len(close) >= 6 else None
@@ -466,7 +480,6 @@ def get_stock_summary(tickers):
             rsi_series = RSIIndicator(close=close).rsi()
             rsi_val = float(round(rsi_series.iloc[-1], 2))
 
-            # Fundamentals
             try:
                 info = stock.get_info()
             except Exception:
@@ -478,7 +491,12 @@ def get_stock_summary(tickers):
             except Exception:
                 pe = None
 
-            # Forward EPS (eps_trend + fallback to forwardEps)
+            market_cap = info.get("marketCap", None)
+            try:
+                market_cap = float(market_cap)
+            except Exception:
+                market_cap = None
+
             fpe = None
             forward_eps = None
             try:
@@ -515,13 +533,14 @@ def get_stock_summary(tickers):
                 rsi=rsi_val,
                 pct_from_high=pct_from_52wk,
                 pct_1m=pct_1m,
-                fpe=fpe
+                fpe=fpe,
             )
 
             rows.append(
                 {
                     "Ticker": ticker,
                     "Price": price,
+                    "% 1D": round(change_pct_rt, 2) if change_pct_rt is not None else None,
                     "% 5D": pct_5d,
                     "% 1M": pct_1m,
                     "% from 52w High": pct_from_52wk,
@@ -529,6 +548,7 @@ def get_stock_summary(tickers):
                     "Value Signal": value_signal,
                     "P/E": pe,
                     "Fwd P/E": fpe,
+                    "Market Cap": market_cap,
                 }
             )
 
@@ -538,12 +558,11 @@ def get_stock_summary(tickers):
     return pd.DataFrame(rows)
 
 
-# -------------- COMMON COLUMN CONFIG ------------------
-
 BASE_COLUMN_CONFIG = {
-    col: st.column_config.Column(width="fit")  # auto-size
+    col: st.column_config.Column(width="fit")
     for col in [
         "Price",
+        "% 1D",
         "% 5D",
         "% 1M",
         "% from 52w High",
@@ -556,7 +575,6 @@ BASE_COLUMN_CONFIG = {
 
 
 def build_column_config(columns):
-    """Return column_config dict for given columns."""
     cfg = {}
     for col in columns:
         if col in BASE_COLUMN_CONFIG:
@@ -566,7 +584,28 @@ def build_column_config(columns):
     return cfg
 
 
-# -------------- TABLE 1: TECH LEADERSHIP MONITOR ------------------
+def price_style(row):
+    val = row.get("% 1D", None)
+    if pd.isna(val):
+        return [""]
+    if val > 0:
+        return ["color: #22c55e; font-weight: 600;"]
+    if val < 0:
+        return ["color: #ef4444; font-weight: 600;"]
+    return ["color: #e5e5e5; font-weight: 600;"]
+
+
+def pct1d_style(val):
+    if pd.isna(val):
+        return ""
+    if val > 0:
+        return "color: #22c55e; font-weight: 600;"
+    if val < 0:
+        return "color: #ef4444; font-weight: 600;"
+    return "color: #e5e5e5; font-weight: 600;"
+
+
+# -------------- TABLE 1: TECH LEADERSHIP ------------------
 
 df = pd.DataFrame()
 df_ndx = pd.DataFrame()
@@ -579,11 +618,18 @@ with st.spinner("📡 Fetching data for Tech Leadership Monitor..."):
 
 if not df.empty:
     df = df.set_index("Ticker")
-    # Sort by drawdown: deepest first
-    df_display = df.sort_values("% from 52w High")
+
+    # Sort by invisible Market Cap (desc)
+    if "Market Cap" in df.columns:
+        df_sorted = df.sort_values("Market Cap", ascending=False)
+    else:
+        df_sorted = df.copy()
+
+    df_display = df_sorted.drop(columns=["Market Cap"], errors="ignore")
 
     format_dict = {
         "Price": "${:,.2f}",
+        "% 1D": "{:.1f}%",
         "% 5D": "{:.1f}%",
         "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
@@ -593,7 +639,6 @@ if not df.empty:
 
     styled = df_display.style.format(format_dict, na_rep="–")
 
-    # Heatmaps
     pct_cols = ["% 5D", "% 1M"]
     dist_col = "% from 52w High"
 
@@ -602,9 +647,7 @@ if not df.empty:
             vmin = df_display[col].min()
             vmax = df_display[col].max()
             styled = styled.apply(
-                lambda s, vmin=vmin, vmax=vmax: [
-                    color_tripolar(v, vmin, vmax) for v in s
-                ],
+                lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
                 subset=[col],
                 axis=0,
             )
@@ -613,14 +656,11 @@ if not df.empty:
         vmin = df_display[dist_col].min()
         vmax = 0.0
         styled = styled.apply(
-            lambda s, vmin=vmin, vmax=vmax: [
-                color_bipolar(v, vmin, vmax) for v in s
-            ],
+            lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
             subset=[dist_col],
             axis=0,
         )
 
-    # Center ALL cells + headers
     styled = styled.set_table_styles(
         [
             {"selector": "th.col_heading", "props": [("text-align", "center")]},
@@ -630,6 +670,8 @@ if not df.empty:
     )
 
     styled = styled.applymap(rsi_zone_style, subset=["RSI Zone"])
+    styled = styled.apply(lambda row: price_style(row), subset=["Price"], axis=1)
+    styled = styled.applymap(pct1d_style, subset=["% 1D"])
 
     column_config = build_column_config(df_display.columns)
 
@@ -656,12 +698,13 @@ with st.spinner("📡 Fetching Nasdaq-100 data..."):
     df_ndx = get_stock_summary(NASDAQ100_TICKERS)
 
 if not df_ndx.empty:
-    df_ndx = df_ndx.sort_values("% from 52w High")
     df_ndx = df_ndx.set_index("Ticker")
-    df_ndx_display = df_ndx.copy()
+    df_ndx = df_ndx.sort_values("% from 52w High")
+    df_ndx_display = df_ndx.drop(columns=["Market Cap"], errors="ignore")
 
     ndx_format_dict = {
         "Price": "${:,.2f}",
+        "% 1D": "{:.1f}%",
         "% 5D": "{:.1f}%",
         "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
@@ -679,9 +722,7 @@ if not df_ndx.empty:
             vmin = df_ndx_display[col].min()
             vmax = df_ndx_display[col].max()
             styled_ndx = styled_ndx.apply(
-                lambda s, vmin=vmin, vmax=vmax: [
-                    color_tripolar(v, vmin, vmax) for v in s
-                ],
+                lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
                 subset=[col],
                 axis=0,
             )
@@ -690,9 +731,7 @@ if not df_ndx.empty:
         vmin = df_ndx_display[ndx_dist_col].min()
         vmax = 0.0
         styled_ndx = styled_ndx.apply(
-            lambda s, vmin=vmin, vmax=vmax: [
-                color_bipolar(v, vmin, vmax) for v in s
-            ],
+            lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
             subset=[ndx_dist_col],
             axis=0,
         )
@@ -706,6 +745,8 @@ if not df_ndx.empty:
     )
 
     styled_ndx = styled_ndx.applymap(rsi_zone_style, subset=["RSI Zone"])
+    styled_ndx = styled_ndx.apply(lambda row: price_style(row), subset=["Price"], axis=1)
+    styled_ndx = styled_ndx.applymap(pct1d_style, subset=["% 1D"])
 
     ndx_column_config = build_column_config(df_ndx_display.columns)
 
@@ -724,8 +765,8 @@ else:
 st.markdown("---")
 st.markdown("## Buy-Zone Candidates (Screened by Your Rules)")
 
+
 def build_buy_candidates(df_tech, df_nasdaq):
-    # Decide source universe
     sources = []
     if buy_universe in ("Tech leaders only", "Both") and df_tech is not None and not df_tech.empty:
         sources.append(df_tech.copy())
@@ -736,26 +777,18 @@ def build_buy_candidates(df_tech, df_nasdaq):
         return pd.DataFrame()
 
     base = pd.concat(sources, axis=0)
-    base = base[~base.index.duplicated(keep="first")]  # avoid duplicates if any
+    base = base[~base.index.duplicated(keep="first")]
 
-    # Extract numeric RSI from "RSI Zone"
     rsi_numeric = base["RSI Zone"].str.extract(r"([\d.]+)").astype(float)[0]
     base["RSI_numeric"] = rsi_numeric
 
-    # Filter by drawdown and RSI
     mask = pd.Series(True, index=base.index)
 
-    # Drawdown: <= min_dd (min_dd is negative)
-    mask &= base["% from 52w High"] <= float(min_dd)
-
-    # RSI not overheated (e.g., < 55)
+    mask &= base["% from 52w High"] <= min_dd
     mask &= base["RSI_numeric"] < 55
-
-    # Fwd P/E constraint
     mask &= base["Fwd P/E"].notna()
     mask &= base["Fwd P/E"] <= float(max_fpe)
 
-    # Optionally restrict to value signals
     if only_value:
         mask &= base["Value Signal"].str.contains(
             "Deep value pullback|Value watch", na=False
@@ -766,7 +799,6 @@ def build_buy_candidates(df_tech, df_nasdaq):
         return candidates
 
     candidates = candidates.sort_values("% from 52w High")
-
     return candidates
 
 
@@ -776,12 +808,12 @@ else:
     candidates = pd.DataFrame()
 
 if not candidates.empty:
-    # Show only key columns
-    show_cols = ["Price", "% from 52w High", "RSI Zone", "Fwd P/E", "Value Signal"]
+    show_cols = ["Price", "% 1D", "% from 52w High", "RSI Zone", "Fwd P/E", "Value Signal"]
     candidates_display = candidates[show_cols]
 
     cand_format = {
         "Price": "${:,.2f}",
+        "% 1D": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
         "Fwd P/E": "{:.1f}",
     }
@@ -795,6 +827,8 @@ if not candidates.empty:
         overwrite=False,
     )
     cand_styled = cand_styled.applymap(rsi_zone_style, subset=["RSI Zone"])
+    cand_styled = cand_styled.apply(lambda row: price_style(row), subset=["Price"], axis=1)
+    cand_styled = cand_styled.applymap(pct1d_style, subset=["% 1D"])
 
     st.dataframe(
         cand_styled,
@@ -802,7 +836,7 @@ if not candidates.empty:
         height=400,
     )
 else:
-    st.write("No tickers currently match your buy-zone criteria. Adjust filters in the sidebar to widen the search.")
+    st.write("No tickers currently match your buy-zone criteria. Loosen filters in the sidebar to widen the search.")
 
 
 # -------------- HOW TO READ THE SIGNALS ------------------
