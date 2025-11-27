@@ -441,19 +441,19 @@ def make_styled_table(df: pd.DataFrame):
     # - RSI Zone          → 2/3 of previous
     # - Value Signal      → ~half of previous
 
-column_config = {
-
-    "Price": st.column_config.Column(width=60),
-    "% 5D": st.column_config.Column(width=50),
-    "% 1M": st.column_config.Column(width=50),
-    "% from 52w High": st.column_config.Column(width=110),
-
-    "RSI Zone": st.column_config.Column(width=120),
-    "Value Signal": st.column_config.Column(width=150),
-
-    "P/E": st.column_config.Column(width=35),
-    "Fwd P/E": st.column_config.Column(width=35),
-}
+            column_config = {
+            
+                "Price": st.column_config.Column(width=60),
+                "% 5D": st.column_config.Column(width=50),
+                "% 1M": st.column_config.Column(width=50),
+                "% from 52w High": st.column_config.Column(width=110),
+            
+                "RSI Zone": st.column_config.Column(width=120),
+                "Value Signal": st.column_config.Column(width=150),
+            
+                "P/E": st.column_config.Column(width=35),
+                "Fwd P/E": st.column_config.Column(width=35),
+            }
             # fallback for any future extra column
             column_config[col] = st.column_config.Column(width=140)
 
