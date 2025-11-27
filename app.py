@@ -189,18 +189,6 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     return "⚪ Neutral"
 
 
-def rsi_style(val):
-    """CSS style for extreme RSI values (numeric RSI column)."""
-    if pd.isna(val):
-        return ""
-    v = float(val)
-    if v < 30:
-        return "color: #22c55e; font-weight: 600;"  # green
-    if v > 70:
-        return "color: #ef4444; font-weight: 600;"  # red
-    return ""
-
-
 # --- heatmap helpers (pure CSS, no matplotlib) ---
 
 RED = (239, 68, 68)
@@ -225,13 +213,11 @@ def color_tripolar(v, vmin, vmax):
     mid = 0.0
 
     if v < mid:
-        # vmin (most negative) -> RED, 0 -> BLACK
         if vmin >= mid:
             return ""
         t = (v - mid) / (vmin - mid)
         col = _blend(BLACK, RED, t)
     else:
-        # 0 -> BLACK, vmax -> GREEN
         if vmax <= mid:
             return ""
         t = (v - mid) / (vmax - mid)
@@ -248,6 +234,22 @@ def color_bipolar(v, vmin, vmax):
     t = (v - vmin) / (vmax - vmin)
     col = _blend(RED, GREEN, t)
     return _rgb_css(col)
+
+
+def rsi_zone_style(val):
+    """Colour the RSI Zone text itself."""
+    if pd.isna(val):
+        return ""
+    text = str(val)
+    if "Oversold" in text:
+        return "color: #22c55e; font-weight: 600;"   # green
+    if "Trend" in text:
+        return "color: #3b82f6; font-weight: 600;"   # blue
+    if "Watch" in text:
+        return "color: #facc15; font-weight: 600;"   # yellow
+    if "Overbought" in text:
+        return "color: #ef4444; font-weight: 600;"   # red
+    return ""
 
 
 @st.cache_data(ttl=600)
@@ -326,7 +328,7 @@ def get_stock_summary(tickers):
                 except ZeroDivisionError:
                     fpe = None
 
-            # RSI zone + emoji, **with numeric value merged**
+            # RSI zone + emoji, with numeric value merged
             if rsi_val < 30:
                 zone_label = "Oversold"
                 emoji = "💚"
@@ -356,8 +358,9 @@ def get_stock_summary(tickers):
                     "% 5D": pct_5d,
                     "% 1M": pct_1m,
                     "% from 52w High": pct_from_52wk,
-                    "RSI": rsi_val,               # numeric (for sorting + colour)
-                    "RSI Zone": rsi_zone_display,  # merged text view
+                    # RSI kept internal (not displayed)
+                    "RSI": rsi_val,
+                    "RSI Zone": rsi_zone_display,
                     "Value Signal": value_signal,
                     "P/E": pe,
                     "Fwd P/E": fpe,
@@ -371,22 +374,27 @@ def get_stock_summary(tickers):
 
 
 def make_styled_table(df: pd.DataFrame):
-    """Return (styled, column_config) so both tables share exact look."""
-    df = df.set_index("Ticker")
+    """
+    Return (styled, column_config) so both tables share exact look.
+    NOTE: df contains internal 'RSI' numeric column that we drop from display.
+    """
+    # Keep RSI numeric for logic/heatmaps if needed, but hide from UI
+    df_display = df.drop(columns=["RSI"])
+
+    df_display = df_display.set_index("Ticker")
 
     format_dict = {
         "Price": "${:,.2f}",
         "% 5D": "{:.1f}%",
         "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
-        "RSI": "{:.1f}",
         "P/E": "{:.1f}",
         "Fwd P/E": "{:.1f}",
     }
 
-    styled = df.style.format(format_dict, na_rep="–")
+    styled = df_display.style.format(format_dict, na_rep="–")
 
-    # Heatmaps
+    # Heatmaps use underlying numeric df
     pct_cols = ["% 5D", "% 1M"]
     dist_col = "% from 52w High"
 
@@ -413,7 +421,7 @@ def make_styled_table(df: pd.DataFrame):
             axis=0,
         )
 
-    numeric_cols = ["Price", "% 5D", "% 1M", "% from 52w High", "RSI", "P/E", "Fwd P/E"]
+    numeric_cols = ["Price", "% 5D", "% 1M", "% from 52w High", "P/E", "Fwd P/E"]
 
     styled = (
         styled.set_table_styles(
@@ -423,15 +431,22 @@ def make_styled_table(df: pd.DataFrame):
         .set_properties(subset=numeric_cols, **{"text-align": "right"})
     )
 
-    styled = styled.applymap(rsi_style, subset=["RSI"])
+    # Colour RSI Zone text itself
+    styled = styled.applymap(rsi_zone_style, subset=["RSI Zone"])
 
-    # Column widths: make P/E columns smaller
+    # Column widths:
     column_config = {}
-    for col in df.columns:
+    for col in df_display.columns:
         if col in ["P/E", "Fwd P/E"]:
-            column_config[col] = st.column_config.Column(width="small")
-        else:
-            column_config[col] = st.column_config.Column(width="medium")
+            column_config[col] = st.column_config.Column(width=80)     # already good
+        elif col in ["Price", "% 5D", "% 1M"]:
+            column_config[col] = st.column_config.Column(width=90)     # ~1/4 width
+        elif col == "% from 52w High":
+            column_config[col] = st.column_config.Column(width=120)    # ~half width
+        elif col == "RSI Zone":
+            column_config[col] = st.column_config.Column(width=180)    # 2/3-ish
+        else:  # Value Signal etc.
+            column_config[col] = st.column_config.Column(width=220)
 
     return styled, column_config
 
@@ -449,7 +464,6 @@ else:
 
 st.markdown("---")
 st.markdown("## NASDAQ-100 Deep Drawdown Table")
-st.subheader("Nasdaq-100 Deep Drawdown Scanner")
 
 
 # -------------- TABLE 2: NASDAQ-100 ------------------
@@ -458,8 +472,7 @@ with st.spinner("📡 Fetching Nasdaq-100 data..."):
     df_ndx = get_stock_summary(NASDAQ100_TICKERS)
 
 if not df_ndx.empty:
-    # Sort by biggest drawdown first
-    df_ndx = df_ndx.sort_values("% from 52w High")
+    df_ndx = df_ndx.sort_values("% from 52w High")  # deepest drawdown at top
     styled_ndx, col_cfg_ndx = make_styled_table(df_ndx)
     st.dataframe(styled_ndx, use_container_width=True, height=600, column_config=col_cfg_ndx)
 else:
