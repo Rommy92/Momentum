@@ -141,7 +141,7 @@ else:
 st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
-# -------------- TICKERS ------------------
+# -------------- TICKER LISTS ------------------
 
 TOP_TECH_TICKERS = [
     "MSFT", "AMZN", "GOOG", "NVDA", "META",
@@ -149,7 +149,22 @@ TOP_TECH_TICKERS = [
     "AMD", "NOW", "MU", "SNOW", "PLTR",
     "ANET", "CRWD", "PANW", "NET", "DDOG",
     "MDB", "MRVL", "IBM", "AMKR", "SMCI",
-    "AXON", "ISRG",   # INTU -> ISRG
+    "AXON", "ISRG",
+]
+
+NASDAQ100_TICKERS = [
+    "ADBE", "AMD", "ABNB", "GOOGL", "GOOG", "AMZN", "AEP", "AMGN", "ADI",
+    "AAPL", "AMAT", "APP", "ARM", "ASML", "AZN", "TEAM", "ADSK", "ADP",
+    "AXON", "BKR", "BIIB", "BKNG", "AVGO", "CDNS", "CDW", "CHTR", "CTAS",
+    "CSCO", "CCEP", "CTSH", "CMCSA", "CEG", "CPRT", "CSGP", "COST", "CRWD",
+    "CSX", "DDOG", "DXCM", "FANG", "DASH", "EA", "EXC", "FAST", "FTNT",
+    "GEHC", "GILD", "GFS", "HON", "IDXX", "INTC", "INTU", "ISRG", "KDP",
+    "KLAC", "KHC", "LRCX", "LIN", "LULU", "MAR", "MRVL", "MELI", "META",
+    "MCHP", "MU", "MSFT", "MSTR", "MDLZ", "MNST", "NFLX", "NVDA", "NXPI",
+    "ORLY", "ODFL", "ON", "PCAR", "PLTR", "PANW", "PAYX", "PYPL", "PDD",
+    "PEP", "QCOM", "REGN", "ROP", "ROST", "SHOP", "SOLS", "SBUX", "SNPS",
+    "TMUS", "TTWO", "TSLA", "TXN", "TRI", "TTD", "VRSK", "VRTX", "WBD",
+    "WDAY", "XEL", "ZS",
 ]
 
 
@@ -175,7 +190,7 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
 
 
 def rsi_style(val):
-    """CSS style for extreme RSI values."""
+    """CSS style for extreme RSI values (numeric RSI column)."""
     if pd.isna(val):
         return ""
     v = float(val)
@@ -195,10 +210,7 @@ GREEN = (34, 197, 94)
 
 def _blend(c_from, c_to, t: float):
     t = max(0.0, min(1.0, float(t)))
-    return tuple(
-        int(round(cf + (ct - cf) * t))
-        for cf, ct in zip(c_from, c_to)
-    )
+    return tuple(int(round(cf + (ct - cf) * t)) for cf, ct in zip(c_from, c_to))
 
 
 def _rgb_css(c):
@@ -206,10 +218,7 @@ def _rgb_css(c):
 
 
 def color_tripolar(v, vmin, vmax):
-    """
-    Red -> Black -> Green around 0.
-    vmin <= v <= vmax, usually vmin<0<vmax.
-    """
+    """Red -> Black -> Green around 0 (for % 5D / % 1M)."""
     if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
         return ""
     v = float(v)
@@ -219,26 +228,24 @@ def color_tripolar(v, vmin, vmax):
         # vmin (most negative) -> RED, 0 -> BLACK
         if vmin >= mid:
             return ""
-        t = (v - mid) / (vmin - mid)  # in [0,1]
+        t = (v - mid) / (vmin - mid)
         col = _blend(BLACK, RED, t)
     else:
         # 0 -> BLACK, vmax -> GREEN
         if vmax <= mid:
             return ""
-        t = (v - mid) / (vmax - mid)  # in [0,1]
+        t = (v - mid) / (vmax - mid)
         col = _blend(BLACK, GREEN, t)
 
     return _rgb_css(col)
 
 
 def color_bipolar(v, vmin, vmax):
-    """
-    Red -> Green, used for % from 52w High (vmin negative, vmax ~0).
-    """
+    """Red -> Green, used for % from 52w High (vmin negative, vmax ~0)."""
     if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
         return ""
     v = float(v)
-    t = (v - vmin) / (vmax - vmin)  # maps vmin->0, vmax->1
+    t = (v - vmin) / (vmax - vmin)
     col = _blend(RED, GREEN, t)
     return _rgb_css(col)
 
@@ -319,12 +326,21 @@ def get_stock_summary(tickers):
                 except ZeroDivisionError:
                     fpe = None
 
-            rsi_signal = (
-                "💚 Oversold" if rsi_val < 30 else
-                "🟡 Watch" if rsi_val < 50 else
-                "🔵 Trend" if rsi_val < 70 else
-                "🔴 Overbought"
-            )
+            # RSI zone + emoji, **with numeric value merged**
+            if rsi_val < 30:
+                zone_label = "Oversold"
+                emoji = "💚"
+            elif rsi_val < 50:
+                zone_label = "Watch"
+                emoji = "🟡"
+            elif rsi_val < 70:
+                zone_label = "Trend"
+                emoji = "🔵"
+            else:
+                zone_label = "Overbought"
+                emoji = "🔴"
+
+            rsi_zone_display = f"{emoji} {zone_label} ({rsi_val:.1f})"
 
             value_signal = get_value_momentum_signal(
                 rsi=rsi_val,
@@ -340,8 +356,8 @@ def get_stock_summary(tickers):
                     "% 5D": pct_5d,
                     "% 1M": pct_1m,
                     "% from 52w High": pct_from_52wk,
-                    "RSI": rsi_val,
-                    "RSI Zone": rsi_signal,
+                    "RSI": rsi_val,               # numeric (for sorting + colour)
+                    "RSI Zone": rsi_zone_display,  # merged text view
                     "Value Signal": value_signal,
                     "P/E": pe,
                     "Fwd P/E": fpe,
@@ -355,10 +371,8 @@ def get_stock_summary(tickers):
 
 
 def make_styled_table(df: pd.DataFrame):
-    """Apply all formatting / heatmaps / alignment and return (df_indexed, styler)."""
-    df = df.copy()
-    if "Ticker" in df.columns:
-        df = df.set_index("Ticker")
+    """Return (styled, column_config) so both tables share exact look."""
+    df = df.set_index("Ticker")
 
     format_dict = {
         "Price": "${:,.2f}",
@@ -372,13 +386,12 @@ def make_styled_table(df: pd.DataFrame):
 
     styled = df.style.format(format_dict, na_rep="–")
 
-    # ---- Heatmaps ----
+    # Heatmaps
     pct_cols = ["% 5D", "% 1M"]
     dist_col = "% from 52w High"
 
-    # Tri-colour for % 5D / % 1M
     for col in pct_cols:
-        if col in df.columns and df[col].notna().any():
+        if df[col].notna().any():
             vmin = df[col].min()
             vmax = df[col].max()
             styled = styled.apply(
@@ -389,8 +402,7 @@ def make_styled_table(df: pd.DataFrame):
                 axis=0,
             )
 
-    # Red->green for distance from 52w high
-    if dist_col in df.columns and df[dist_col].notna().any():
+    if df[dist_col].notna().any():
         vmin = df[dist_col].min()
         vmax = 0.0
         styled = styled.apply(
@@ -401,17 +413,7 @@ def make_styled_table(df: pd.DataFrame):
             axis=0,
         )
 
-    # Right-align numeric columns & center headers
-    numeric_cols = [
-        "Price",
-        "% 5D",
-        "% 1M",
-        "% from 52w High",
-        "RSI",
-        "P/E",
-        "Fwd P/E",
-    ]
-    numeric_cols = [c for c in numeric_cols if c in df.columns]
+    numeric_cols = ["Price", "% 5D", "% 1M", "% from 52w High", "RSI", "P/E", "Fwd P/E"]
 
     styled = (
         styled.set_table_styles(
@@ -421,83 +423,44 @@ def make_styled_table(df: pd.DataFrame):
         .set_properties(subset=numeric_cols, **{"text-align": "right"})
     )
 
-    # RSI highlight (<30 green, >70 red)
-    if "RSI" in df.columns:
-        styled = styled.applymap(rsi_style, subset=["RSI"])
+    styled = styled.applymap(rsi_style, subset=["RSI"])
 
-    return df, styled
+    # Column widths: make P/E columns smaller
+    column_config = {}
+    for col in df.columns:
+        if col in ["P/E", "Fwd P/E"]:
+            column_config[col] = st.column_config.Column(width="small")
+        else:
+            column_config[col] = st.column_config.Column(width="medium")
+
+    return styled, column_config
 
 
-# -------------- TABLE 1: TECH LEADERS ------------------
+# -------------- TABLE 1: TECH LEADERSHIP ------------------
 
-with st.spinner("📡 Fetching data..."):
-    df = get_stock_summary(TOP_TECH_TICKERS)
+with st.spinner("📡 Fetching tech leadership data..."):
+    df_top = get_stock_summary(TOP_TECH_TICKERS)
 
-if not df.empty:
-    df_idx, styled = make_styled_table(df)
-    st.dataframe(styled, use_container_width=True, height=600)
+if not df_top.empty:
+    styled_top, col_cfg_top = make_styled_table(df_top)
+    st.dataframe(styled_top, use_container_width=True, height=600, column_config=col_cfg_top)
 else:
-    st.write("No data loaded.")
+    st.write("No data loaded for tech tickers.")
 
 st.markdown("---")
-
-# -------------- TABLE 2: NASDAQ-100 DEEP DRAWDOWN ------------------
-
-st.markdown(
-    "## =========================\n"
-    "##  NASDAQ-100 DEEP DRAWDOWN TABLE\n"
-    "## ========================="
-)
-
+st.markdown("## NASDAQ-100 Deep Drawdown Table")
 st.subheader("Nasdaq-100 Deep Drawdown Scanner")
 
-# Full current Nasdaq-100 components (as of ~Oct 2025)
-NASDAQ100_TICKERS = [
-    "ADBE", "AMD", "ABNB", "GOOGL", "GOOG", "AMZN", "AEP", "AMGN", "ADI",
-    "AAPL", "AMAT", "APP", "ARM", "ASML", "AZN", "TEAM", "ADSK", "ADP",
-    "AXON", "BKR", "BIIB", "BKNG", "AVGO", "CDNS", "CDW", "CHTR", "CTAS",
-    "CSCO", "CCEP", "CTSH", "CMCSA", "CEG", "CPRT", "CSGP", "COST", "CRWD",
-    "CSX", "DDOG", "DXCM", "FANG", "DASH", "EA", "EXC", "FAST", "FTNT",
-    "GEHC", "GILD", "GFS", "HON", "IDXX", "INTC", "INTU", "ISRG", "KDP",
-    "KLAC", "KHC", "LRCX", "LIN", "LULU", "MAR", "MRVL", "MELI", "META",
-    "MCHP", "MU", "MSFT", "MSTR", "MDLZ", "MNST", "NFLX", "NVDA", "NXPI",
-    "ORLY", "ODFL", "ON", "PCAR", "PLTR", "PANW", "PAYX", "PYPL", "PDD",
-    "PEP", "QCOM", "REGN", "ROP", "ROST", "SHOP", "SOLS", "SBUX", "SNPS",
-    "TMUS", "TTWO", "TSLA", "TXN", "TRI", "TTD", "VRSK", "VRTX", "WBD",
-    "WDAY", "XEL", "ZS",
-]
+
+# -------------- TABLE 2: NASDAQ-100 ------------------
 
 with st.spinner("📡 Fetching Nasdaq-100 data..."):
     df_ndx = get_stock_summary(NASDAQ100_TICKERS)
 
 if not df_ndx.empty:
-    # Sort by deepest drawdown first
+    # Sort by biggest drawdown first
     df_ndx = df_ndx.sort_values("% from 52w High")
-    df_ndx_idx, styled_ndx = make_styled_table(df_ndx)
-
-    st.dataframe(styled_ndx, use_container_width=True, height=600)
+    styled_ndx, col_cfg_ndx = make_styled_table(df_ndx)
+    st.dataframe(styled_ndx, use_container_width=True, height=600, column_config=col_cfg_ndx)
 else:
     st.write("No Nasdaq-100 data loaded.")
-
-st.markdown("---")
-
-# -------------- EXPLANATION ------------------
-
-st.markdown(
-    """
-### 📘 How to read the signals
-
-**RSI Zone (classic RSI view)**  
-- 💚 **Oversold** = RSI < 30  
-- 🟡 **Watch** = 30–50  
-- 🔵 **Trend** = 50–70  
-- 🔴 **Overbought** = RSI > 70  
-
-**Value Signal (combined value + momentum)**  
-- 💚 **Deep value pullback** – RSI washed out, far below 52-week high, reasonable forward P/E.  
-- 🟡 **Value watch** – Decent pullback + weak RSI, forward P/E not extreme.  
-- 🔵 **Momentum trend** – Positive 1M performance, RSI 50–70.  
-- 🔴 **Hot / extended** – Near highs and/or expensive P/E, or overbought RSI.  
-- ⚪ **Neutral** – No strong pattern.
-"""
-)
