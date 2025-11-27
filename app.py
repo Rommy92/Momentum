@@ -391,15 +391,13 @@ def get_stock_summary(tickers):
 
 # Explicit sizes you can tweak any time
 BASE_COLUMN_CONFIG = {
-    "Price": st.column_config.Column(width=20),
-    "% 5D": st.column_config.Column(width=20),
-    "% 1M": st.column_config.Column(width=20),
-    "% from 52w High": st.column_config.Column(width=50),
-    "RSI Zone": st.column_config.Column(width=60),
-    "Value Signal": st.column_config.Column(width=80),
-    "P/E": st.column_config.Column(width=15),
-    "Fwd P/E": st.column_config.Column(width=20),
+    col: st.column_config.Column(width="fit")  # auto size
+    for col in [
+        "Price", "% 5D", "% 1M", "% from 52w High",
+        "RSI Zone", "Value Signal", "P/E", "Fwd P/E"
+    ]
 }
+
 
 
 def build_column_config(columns):
