@@ -9,6 +9,7 @@ st.set_page_config(page_title="Tech Leadership Monitor", layout="wide")
 
 # -------------- QQQ MODE + THEME LOGIC ------------------
 
+
 def get_qqq_status():
     """
     Fetch last 2 days of QQQ and decide:
@@ -141,7 +142,7 @@ else:
 st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
-# -------------- TICKER LISTS ------------------
+# -------------- TICKERS ------------------
 
 TOP_TECH_TICKERS = [
     "MSFT", "AMZN", "GOOG", "NVDA", "META",
@@ -152,6 +153,7 @@ TOP_TECH_TICKERS = [
     "AXON", "ISRG",
 ]
 
+# Full Nasdaq-100 list (as of late 2025)
 NASDAQ100_TICKERS = [
     "ADBE", "AMD", "ABNB", "GOOGL", "GOOG", "AMZN", "AEP", "AMGN", "ADI",
     "AAPL", "AMAT", "APP", "ARM", "ASML", "AZN", "TEAM", "ADSK", "ADP",
@@ -169,6 +171,7 @@ NASDAQ100_TICKERS = [
 
 
 # -------------- HELPERS ------------------
+
 
 def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     if rsi is None or pct_from_high is None:
@@ -189,6 +192,38 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     return "⚪ Neutral"
 
 
+def rsi_zone_text(rsi_val: float) -> str:
+    """Return text like '73.9 – Overbought'."""
+    if rsi_val < 30:
+        zone = "Oversold"
+    elif rsi_val < 50:
+        zone = "Watch"
+    elif rsi_val < 70:
+        zone = "Trend"
+    else:
+        zone = "Overbought"
+    return f"{rsi_val:.1f} – {zone}"
+
+
+def rsi_zone_style(val):
+    """Colour RSI Zone cell based on numeric RSI inside the text."""
+    if val is None:
+        return ""
+    try:
+        num_str = str(val).split()[0]  # "73.9 – Overbought" -> "73.9"
+        rsi = float(num_str)
+    except Exception:
+        return ""
+
+    if rsi < 30:
+        return "color: #22c55e; font-weight: 600;"  # green
+    if rsi < 50:
+        return "color: #eab308; font-weight: 600;"  # yellow
+    if rsi < 70:
+        return "color: #3b82f6; font-weight: 600;"  # blue
+    return "color: #ef4444; font-weight: 600;"       # red
+
+
 # --- heatmap helpers (pure CSS, no matplotlib) ---
 
 RED = (239, 68, 68)
@@ -198,7 +233,10 @@ GREEN = (34, 197, 94)
 
 def _blend(c_from, c_to, t: float):
     t = max(0.0, min(1.0, float(t)))
-    return tuple(int(round(cf + (ct - cf) * t)) for cf, ct in zip(c_from, c_to))
+    return tuple(
+        int(round(cf + (ct - cf) * t))
+        for cf, ct in zip(c_from, c_to)
+    )
 
 
 def _rgb_css(c):
@@ -206,50 +244,44 @@ def _rgb_css(c):
 
 
 def color_tripolar(v, vmin, vmax):
-    """Red -> Black -> Green around 0 (for % 5D / % 1M)."""
+    """
+    Red -> Black -> Green around 0.
+    vmin <= v <= vmax, usually vmin<0<vmax.
+    """
     if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
         return ""
     v = float(v)
     mid = 0.0
 
     if v < mid:
+        # vmin (most negative) -> RED, 0 -> BLACK
         if vmin >= mid:
             return ""
-        t = (v - mid) / (vmin - mid)
+        t = (v - mid) / (vmin - mid)  # in [0,1]
         col = _blend(BLACK, RED, t)
     else:
+        # 0 -> BLACK, vmax -> GREEN
         if vmax <= mid:
             return ""
-        t = (v - mid) / (vmax - mid)
+        t = (v - mid) / (vmax - mid)  # in [0,1]
         col = _blend(BLACK, GREEN, t)
 
     return _rgb_css(col)
 
 
 def color_bipolar(v, vmin, vmax):
-    """Red -> Green, used for % from 52w High (vmin negative, vmax ~0)."""
+    """
+    Red -> Green, used for % from 52w High (vmin negative, vmax ~0).
+    """
     if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
         return ""
     v = float(v)
-    t = (v - vmin) / (vmax - vmin)
+    t = (v - vmin) / (vmax - vmin)  # maps vmin->0, vmax->1
     col = _blend(RED, GREEN, t)
     return _rgb_css(col)
 
 
-def rsi_zone_style(val):
-    """Colour the RSI Zone text itself."""
-    if pd.isna(val):
-        return ""
-    text = str(val)
-    if "Oversold" in text:
-        return "color: #22c55e; font-weight: 600;"   # green
-    if "Trend" in text:
-        return "color: #3b82f6; font-weight: 600;"   # blue
-    if "Watch" in text:
-        return "color: #facc15; font-weight: 600;"   # yellow
-    if "Overbought" in text:
-        return "color: #ef4444; font-weight: 600;"   # red
-    return ""
+# -------------- DATA FETCH ------------------
 
 
 @st.cache_data(ttl=600)
@@ -328,44 +360,26 @@ def get_stock_summary(tickers):
                 except ZeroDivisionError:
                     fpe = None
 
-            # RSI zone + emoji, with numeric value merged
-            if rsi_val < 30:
-                zone_label = "Oversold"
-                emoji = "💚"
-            elif rsi_val < 50:
-                zone_label = "Watch"
-                emoji = "🟡"
-            elif rsi_val < 70:
-                zone_label = "Trend"
-                emoji = "🔵"
-            else:
-                zone_label = "Overbought"
-                emoji = "🔴"
-
-            rsi_zone_display = f"{emoji} {zone_label} ({rsi_val:.1f})"
+            rsi_zone_str = rsi_zone_text(rsi_val)
 
             value_signal = get_value_momentum_signal(
                 rsi=rsi_val,
                 pct_from_high=pct_from_52wk,
                 pct_1m=pct_1m,
-                fpe=fpe,
+                fpe=fpe
             )
 
-            rows.append(
-                {
-                    "Ticker": ticker,
-                    "Price": price,
-                    "% 5D": pct_5d,
-                    "% 1M": pct_1m,
-                    "% from 52w High": pct_from_52wk,
-                    # RSI kept internal (not displayed)
-                    "RSI": rsi_val,
-                    "RSI Zone": rsi_zone_display,
-                    "Value Signal": value_signal,
-                    "P/E": pe,
-                    "Fwd P/E": fpe,
-                }
-            )
+            rows.append({
+                "Ticker": ticker,
+                "Price": price,
+                "% 5D": pct_5d,
+                "% 1M": pct_1m,
+                "% from 52w High": pct_from_52wk,
+                "RSI Zone": rsi_zone_str,
+                "Value Signal": value_signal,
+                "P/E": pe,
+                "Fwd P/E": fpe,
+            })
 
         except Exception:
             continue
@@ -373,15 +387,42 @@ def get_stock_summary(tickers):
     return pd.DataFrame(rows)
 
 
-def make_styled_table(df: pd.DataFrame):
-    """
-    Return (styled, column_config) so both tables share exact look.
-    NOTE: df contains internal 'RSI' numeric column that we drop from display.
-    """
-    # Hide raw RSI column from the UI
-    df_display = df.drop(columns=["RSI"])
-    df_display = df_display.set_index("Ticker")
+# -------------- COMMON COLUMN CONFIG ------------------
 
+# Explicit sizes you can tweak any time
+BASE_COLUMN_CONFIG = {
+    "Price": st.column_config.Column(width=60),
+    "% 5D": st.column_config.Column(width=50),
+    "% 1M": st.column_config.Column(width=50),
+    "% from 52w High": st.column_config.Column(width=110),
+    "RSI Zone": st.column_config.Column(width=120),
+    "Value Signal": st.column_config.Column(width=150),
+    "P/E": st.column_config.Column(width=35),
+    "Fwd P/E": st.column_config.Column(width=35),
+}
+
+
+def build_column_config(columns):
+    """Return column_config dict for given columns."""
+    cfg = {}
+    for col in columns:
+        if col in BASE_COLUMN_CONFIG:
+            cfg[col] = BASE_COLUMN_CONFIG[col]
+        else:
+            cfg[col] = st.column_config.Column(width=140)
+    return cfg
+
+
+# -------------- TABLE 1: TECH LEADERSHIP MONITOR ------------------
+
+with st.spinner("📡 Fetching data for Tech Leadership Monitor..."):
+    df = get_stock_summary(TOP_TECH_TICKERS)
+
+if not df.empty:
+    df = df.set_index("Ticker")
+    df_display = df.copy()
+
+    # Formatting
     format_dict = {
         "Price": "${:,.2f}",
         "% 5D": "{:.1f}%",
@@ -393,14 +434,14 @@ def make_styled_table(df: pd.DataFrame):
 
     styled = df_display.style.format(format_dict, na_rep="–")
 
-    # --- Heatmaps use underlying numeric df (not df_display) ---
+    # Heatmaps for % moves
     pct_cols = ["% 5D", "% 1M"]
     dist_col = "% from 52w High"
 
     for col in pct_cols:
-        if df[col].notna().any():
-            vmin = df[col].min()
-            vmax = df[col].max()
+        if df_display[col].notna().any():
+            vmin = df_display[col].min()
+            vmax = df_display[col].max()
             styled = styled.apply(
                 lambda s, vmin=vmin, vmax=vmax: [
                     color_tripolar(v, vmin, vmax) for v in s
@@ -409,8 +450,8 @@ def make_styled_table(df: pd.DataFrame):
                 axis=0,
             )
 
-    if df[dist_col].notna().any():
-        vmin = df[dist_col].min()
+    if df_display[dist_col].notna().any():
+        vmin = df_display[dist_col].min()
         vmax = 0.0
         styled = styled.apply(
             lambda s, vmin=vmin, vmax=vmax: [
@@ -420,9 +461,8 @@ def make_styled_table(df: pd.DataFrame):
             axis=0,
         )
 
-    # Right-align numeric columns, center headers
+    # Right-align numeric columns and center headers
     numeric_cols = ["Price", "% 5D", "% 1M", "% from 52w High", "P/E", "Fwd P/E"]
-
     styled = (
         styled.set_table_styles(
             [{"selector": "th.col_heading", "props": [("text-align", "center")]}],
@@ -431,58 +471,122 @@ def make_styled_table(df: pd.DataFrame):
         .set_properties(subset=numeric_cols, **{"text-align": "right"})
     )
 
-    # Colour RSI Zone text
+    # RSI Zone colouring
     styled = styled.applymap(rsi_zone_style, subset=["RSI Zone"])
 
-    # ---------- Column widths (tighter) ----------
-    # - P/E, Fwd P/E      → very narrow
-    # - Price, % 5D, % 1M → narrow
-    # - % from 52w High   → medium
-    # - RSI Zone          → 2/3 of previous
-    # - Value Signal      → ~half of previous
+    column_config = build_column_config(df_display.columns)
 
-            column_config = {
-            
-                "Price": st.column_config.Column(width=60),
-                "% 5D": st.column_config.Column(width=50),
-                "% 1M": st.column_config.Column(width=50),
-                "% from 52w High": st.column_config.Column(width=110),
-            
-                "RSI Zone": st.column_config.Column(width=120),
-                "Value Signal": st.column_config.Column(width=150),
-            
-                "P/E": st.column_config.Column(width=35),
-                "Fwd P/E": st.column_config.Column(width=35),
-            }
-            # fallback for any future extra column
-            column_config[col] = st.column_config.Column(width=140)
-
-    return styled, column_config
-
-
-# -------------- TABLE 1: TECH LEADERSHIP ------------------
-
-with st.spinner("📡 Fetching tech leadership data..."):
-    df_top = get_stock_summary(TOP_TECH_TICKERS)
-
-if not df_top.empty:
-    styled_top, col_cfg_top = make_styled_table(df_top)
-    st.dataframe(styled_top, use_container_width=True, height=600, column_config=col_cfg_top)
+    st.dataframe(
+        styled,
+        use_container_width=True,
+        height=600,
+        column_config=column_config,
+    )
 else:
-    st.write("No data loaded for tech tickers.")
+    st.write("No data loaded.")
+
+
+# -------------- TABLE 2: NASDAQ-100 DEEP DRAWDOWN ------------------
 
 st.markdown("---")
-st.markdown("## NASDAQ-100 Deep Drawdown Table")
-
-
-# -------------- TABLE 2: NASDAQ-100 ------------------
+st.markdown(
+    "<h1 style='text-align:left; text-shadow:0 0 8px #76B900;'>"
+    "NASDAQ-100 DEEP DRAWDOWN TABLE</h1>",
+    unsafe_allow_html=True,
+)
+st.subheader("Nasdaq-100 Deep Drawdown Scanner")
 
 with st.spinner("📡 Fetching Nasdaq-100 data..."):
     df_ndx = get_stock_summary(NASDAQ100_TICKERS)
 
 if not df_ndx.empty:
-    df_ndx = df_ndx.sort_values("% from 52w High")  # deepest drawdown at top
-    styled_ndx, col_cfg_ndx = make_styled_table(df_ndx)
-    st.dataframe(styled_ndx, use_container_width=True, height=600, column_config=col_cfg_ndx)
+    # Sort by deepest drawdown (most negative % from 52w High at top)
+    df_ndx = df_ndx.sort_values("% from 52w High")
+    df_ndx = df_ndx.set_index("Ticker")
+    df_ndx_display = df_ndx.copy()
+
+    ndx_format_dict = {
+        "Price": "${:,.2f}",
+        "% 5D": "{:.1f}%",
+        "% 1M": "{:.1f}%",
+        "% from 52w High": "{:.1f}%",
+        "P/E": "{:.1f}",
+        "Fwd P/E": "{:.1f}",
+    }
+
+    styled_ndx = df_ndx_display.style.format(ndx_format_dict, na_rep="–")
+
+    # Heatmaps
+    ndx_pct_cols = ["% 5D", "% 1M"]
+    ndx_dist_col = "% from 52w High"
+
+    for col in ndx_pct_cols:
+        if df_ndx_display[col].notna().any():
+            vmin = df_ndx_display[col].min()
+            vmax = df_ndx_display[col].max()
+            styled_ndx = styled_ndx.apply(
+                lambda s, vmin=vmin, vmax=vmax: [
+                    color_tripolar(v, vmin, vmax) for v in s
+                ],
+                subset=[col],
+                axis=0,
+            )
+
+    if df_ndx_display[ndx_dist_col].notna().any():
+        vmin = df_ndx_display[ndx_dist_col].min()
+        vmax = 0.0
+        styled_ndx = styled_ndx.apply(
+            lambda s, vmin=vmin, vmax=vmax: [
+                color_bipolar(v, vmin, vmax) for v in s
+            ],
+            subset=[ndx_dist_col],
+            axis=0,
+        )
+
+    ndx_numeric_cols = ["Price", "% 5D", "% 1M", "% from 52w High", "P/E", "Fwd P/E"]
+    styled_ndx = (
+        styled_ndx.set_table_styles(
+            [{"selector": "th.col_heading", "props": [("text-align", "center")]}],
+            overwrite=False,
+        )
+        .set_properties(subset=ndx_numeric_cols, **{"text-align": "right"})
+    )
+
+    styled_ndx = styled_ndx.applymap(rsi_zone_style, subset=["RSI Zone"])
+
+    ndx_column_config = build_column_config(df_ndx_display.columns)
+
+    st.dataframe(
+        styled_ndx,
+        use_container_width=True,
+        height=600,
+        column_config=ndx_column_config,
+    )
 else:
     st.write("No Nasdaq-100 data loaded.")
+
+
+# -------------- HOW TO READ THE SIGNALS ------------------
+
+st.markdown("---")
+st.markdown(
+    """
+### 📘 How to read the signals
+
+**RSI Zone (merged numeric + label)**  
+- `25.3 – Oversold` → washed out, possible mean-reversion zone  
+- `35–50 – Watch` → still weak, but not extreme  
+- `50–70 – Trend` → healthy uptrend  
+- `> 70 – Overbought` → hot / extended, risk of pullback  
+
+**Value Signal (combined value + momentum)**  
+- 💚 **Deep value pullback** – Big drawdown vs 52-week high, low forward P/E, weak RSI.  
+- 🟡 **Value watch** – Decent pullback, valuation reasonable but not screaming.  
+- 🔵 **Momentum trend** – Positive 1-month performance with RSI in 50–70 zone.  
+- 🔴 **Hot / extended** – Near highs and/or expensive forward P/E, or overbought RSI.  
+- ⚪ **Neutral** – No strong edge from value or momentum.
+
+Use the **top table** for your core AI / infra names, and the **Nasdaq-100 table** as a hunting ground
+for “why is this down 40–50% from highs but still fundamentally good?” candidates.
+"""
+)
