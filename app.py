@@ -378,9 +378,8 @@ def make_styled_table(df: pd.DataFrame):
     Return (styled, column_config) so both tables share exact look.
     NOTE: df contains internal 'RSI' numeric column that we drop from display.
     """
-    # Keep RSI numeric for logic/heatmaps if needed, but hide from UI
+    # Hide raw RSI column from the UI
     df_display = df.drop(columns=["RSI"])
-
     df_display = df_display.set_index("Ticker")
 
     format_dict = {
@@ -394,7 +393,7 @@ def make_styled_table(df: pd.DataFrame):
 
     styled = df_display.style.format(format_dict, na_rep="–")
 
-    # Heatmaps use underlying numeric df
+    # --- Heatmaps use underlying numeric df (not df_display) ---
     pct_cols = ["% 5D", "% 1M"]
     dist_col = "% from 52w High"
 
@@ -421,6 +420,7 @@ def make_styled_table(df: pd.DataFrame):
             axis=0,
         )
 
+    # Right-align numeric columns, center headers
     numeric_cols = ["Price", "% 5D", "% 1M", "% from 52w High", "P/E", "Fwd P/E"]
 
     styled = (
@@ -431,22 +431,32 @@ def make_styled_table(df: pd.DataFrame):
         .set_properties(subset=numeric_cols, **{"text-align": "right"})
     )
 
-    # Colour RSI Zone text itself
+    # Colour RSI Zone text
     styled = styled.applymap(rsi_zone_style, subset=["RSI Zone"])
 
-    # Column widths:
+    # ---------- Column widths (tighter) ----------
+    # - P/E, Fwd P/E      → very narrow
+    # - Price, % 5D, % 1M → narrow
+    # - % from 52w High   → medium
+    # - RSI Zone          → 2/3 of previous
+    # - Value Signal      → ~half of previous
+
     column_config = {}
     for col in df_display.columns:
         if col in ["P/E", "Fwd P/E"]:
-            column_config[col] = st.column_config.Column(width=80)     # already good
+            # half again vs before
+            column_config[col] = st.column_config.Column(width=55)
         elif col in ["Price", "% 5D", "% 1M"]:
-            column_config[col] = st.column_config.Column(width=90)     # ~1/4 width
+            column_config[col] = st.column_config.Column(width=70)
         elif col == "% from 52w High":
-            column_config[col] = st.column_config.Column(width=120)    # ~half width
+            column_config[col] = st.column_config.Column(width=100)
         elif col == "RSI Zone":
-            column_config[col] = st.column_config.Column(width=180)    # 2/3-ish
-        else:  # Value Signal etc.
-            column_config[col] = st.column_config.Column(width=220)
+            column_config[col] = st.column_config.Column(width=120)
+        elif col == "Value Signal":
+            column_config[col] = st.column_config.Column(width=140)
+        else:
+            # fallback for any future extra column
+            column_config[col] = st.column_config.Column(width=140)
 
     return styled, column_config
 
