@@ -7,12 +7,12 @@ from ta.momentum import RSIIndicator
 st.set_page_config(page_title="Tech Leadership Monitor", layout="wide")
 
 
-# -------------- QQQ MODE + THEME LOGIC ------------------
+# -------------- GENERIC TICKER STATUS (QQQ + NQ FUTURES) ------------------
 
 
-def get_qqq_status():
+def get_ticker_status(symbol: str):
     """
-    Fetch last 2 days of QQQ and decide:
+    Fetch last 2 days for a ticker/future and decide:
     - mode: 'green', 'red', 'neutral'
     - price: latest close
     - change: absolute change vs previous close
@@ -20,7 +20,7 @@ def get_qqq_status():
     - arrow: '▲' / '▼' / '▶'
     """
     try:
-        hist = yf.Ticker("QQQ").history(period="2d")
+        hist = yf.Ticker(symbol).history(period="2d")
         closes = hist["Close"].dropna()
         if len(closes) < 2:
             return "neutral", None, None, None, "▶"
@@ -45,7 +45,9 @@ def get_qqq_status():
         return "neutral", None, None, None, "▶"
 
 
-qqq_mode, qqq_price, qqq_change, qqq_change_pct, qqq_arrow = get_qqq_status()
+# QQQ (drives theme) and NQ futures (NQ=F, shown as NQ1!)
+qqq_mode, qqq_price, qqq_change, qqq_change_pct, qqq_arrow = get_ticker_status("QQQ")
+nq_mode, nq_price, nq_change, nq_change_pct, nq_arrow = get_ticker_status("NQ=F")
 
 # Accent color based on QQQ (green = NVIDIA green)
 if qqq_mode == "green":
@@ -134,11 +136,20 @@ st.markdown(cyberpunk_css, unsafe_allow_html=True)
 
 st.title("Tech Leadership Monitor")
 
-if qqq_price is not None and qqq_change_pct is not None:
-    st.subheader(f"QQQ {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%)")
-else:
-    st.subheader("QQQ data unavailable — default neutral theme")
+sub_parts = []
 
+if qqq_price is not None and qqq_change_pct is not None:
+    sub_parts.append(f"QQQ {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%)")
+else:
+    sub_parts.append("QQQ data unavailable")
+
+if nq_price is not None and nq_change_pct is not None:
+    # Show TradingView-style name but use NQ=F data
+    sub_parts.append(f"NQ1! {nq_arrow} {nq_price:.2f} ({nq_change_pct:+.2f}%)")
+else:
+    sub_parts.append("NQ1! data unavailable")
+
+st.subheader("  |  ".join(sub_parts))
 st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
@@ -389,15 +400,13 @@ def get_stock_summary(tickers):
 
 # -------------- COMMON COLUMN CONFIG ------------------
 
-# Explicit sizes you can tweak any time
 BASE_COLUMN_CONFIG = {
-    col: st.column_config.Column(width="fit")  # auto size
+    col: st.column_config.Column(width="fit")  # auto size for all key columns
     for col in [
         "Price", "% 5D", "% 1M", "% from 52w High",
         "RSI Zone", "Value Signal", "P/E", "Fwd P/E"
     ]
 }
-
 
 
 def build_column_config(columns):
@@ -568,14 +577,11 @@ else:
 st.markdown("---")
 st.markdown(
     """
-
-
 **Value Signal (combined value + momentum)**  
 - 💚 **Deep value pullback** – Big drawdown vs 52-week high, low forward P/E, weak RSI.  
 - 🟡 **Value watch** – Decent pullback, valuation reasonable but not screaming.  
 - 🔵 **Momentum trend** – Positive 1-month performance with RSI in 50–70 zone.  
 - 🔴 **Hot / extended** – Near highs and/or expensive forward P/E, or overbought RSI.  
 - ⚪ **Neutral** – No strong edge from value or momentum.
-
 """
 )
