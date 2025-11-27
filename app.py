@@ -430,7 +430,104 @@ else:
 
 st.markdown("---")
 st.markdown("""
-### 📘 How to read the signals
+
+# =========================
+#  NASDAQ-100 DEEP DRAWDOWN TABLE
+# =========================
+
+st.subheader("Nasdaq-100 Deep Drawdown Scanner")
+
+# Full current Nasdaq-100 components (as of Oct 2025, per Wikipedia)
+NASDAQ100_TICKERS = [
+    "ADBE", "AMD", "ABNB", "GOOGL", "GOOG", "AMZN", "AEP", "AMGN", "ADI",
+    "AAPL", "AMAT", "APP", "ARM", "ASML", "AZN", "TEAM", "ADSK", "ADP",
+    "AXON", "BKR", "BIIB", "BKNG", "AVGO", "CDNS", "CDW", "CHTR", "CTAS",
+    "CSCO", "CCEP", "CTSH", "CMCSA", "CEG", "CPRT", "CSGP", "COST", "CRWD",
+    "CSX", "DDOG", "DXCM", "FANG", "DASH", "EA", "EXC", "FAST", "FTNT",
+    "GEHC", "GILD", "GFS", "HON", "IDXX", "INTC", "INTU", "ISRG", "KDP",
+    "KLAC", "KHC", "LRCX", "LIN", "LULU", "MAR", "MRVL", "MELI", "META",
+    "MCHP", "MU", "MSFT", "MSTR", "MDLZ", "MNST", "NFLX", "NVDA", "NXPI",
+    "ORLY", "ODFL", "ON", "PCAR", "PLTR", "PANW", "PAYX", "PYPL", "PDD",
+    "PEP", "QCOM", "REGN", "ROP", "ROST", "SHOP", "SOLS", "SBUX", "SNPS",
+    "TMUS", "TTWO", "TSLA", "TXN", "TRI", "TTD", "VRSK", "VRTX", "WBD",
+    "WDAY", "XEL", "ZS",
+]
+
+with st.spinner("📡 Fetching Nasdaq-100 data..."):
+    df_ndx = get_stock_summary(NASDAQ100_TICKERS)
+
+if not df_ndx.empty:
+    # Biggest losers (most negative) at the top
+    df_ndx = df_ndx.sort_values("% from 52w High")
+    df_ndx = df_ndx.set_index("Ticker")
+
+    # Same formatting as table 1
+    ndx_format_dict = {
+        "Price": "${:,.2f}",
+        "% 5D": "{:.1f}%",
+        "% 1M": "{:.1f}%",
+        "% from 52w High": "{:.1f}%",
+        "RSI": "{:.1f}",
+        "P/E": "{:.1f}",
+        "Fwd P/E": "{:.1f}",
+    }
+
+    styled_ndx = df_ndx.style.format(ndx_format_dict, na_rep="–")
+
+    # Heatmaps for % moves
+    ndx_pct_cols = ["% 5D", "% 1M"]
+    ndx_dist_col = "% from 52w High"
+
+    max_abs_change_ndx = max(
+        abs(df_ndx[ndx_pct_cols].min().min()),
+        abs(df_ndx[ndx_pct_cols].max().max()),
+    )
+
+    styled_ndx = styled_ndx.background_gradient(
+        cmap=heatmap_cmap,
+        subset=ndx_pct_cols,
+        vmin=-max_abs_change_ndx,
+        vmax=max_abs_change_ndx,
+    )
+
+    if df_ndx[ndx_dist_col].notna().any():
+        min_drawdown_ndx = df_ndx[ndx_dist_col].min()
+        styled_ndx = styled_ndx.background_gradient(
+            cmap=heatmap_cmap,
+            subset=[ndx_dist_col],
+            vmin=min_drawdown_ndx,
+            vmax=0,
+        )
+
+    # Right-align numerics + RSI highlight
+    ndx_numeric_cols = [
+        "Price", "% 5D", "% 1M", "% from 52w High", "RSI", "P/E", "Fwd P/E"
+    ]
+
+    styled_ndx = (
+        styled_ndx.set_table_styles(
+            [{"selector": "th.col_heading", "props": [("text-align", "center")]}],
+            overwrite=False,
+        )
+        .set_properties(subset=ndx_numeric_cols, **{"text-align": "right"})
+    )
+
+    styled_ndx = styled_ndx.applymap(rsi_style, subset=["RSI"])
+
+    # Autosize columns as in table 1
+    ndx_column_config = {
+        col: st.column_config.Column(width="fit") for col in df_ndx.columns
+    }
+
+    st.dataframe(
+        styled_ndx,
+        use_container_width=True,
+        height=600,
+        column_config=ndx_column_config,
+    )
+else:
+    st.write("No Nasdaq-100 data loaded.")
+
 
 **RSI Zone (classic RSI view)**  
 - 💚 **Oversold** = RSI < 30  
