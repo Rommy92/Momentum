@@ -391,7 +391,7 @@ def get_stock_summary(tickers):
 
 # Explicit sizes you can tweak any time
 BASE_COLUMN_CONFIG = {
-    "Price": st.column_config.Column(width=25),
+    "Price": st.column_config.Column(width=5),
     "% 5D": st.column_config.Column(width=20),
     "% 1M": st.column_config.Column(width=20),
     "% from 52w High": st.column_config.Column(width=50),
