@@ -197,7 +197,7 @@ TOP_TECH_TICKERS = [
     "AMD", "NOW", "MU", "SNOW", "PLTR",
     "ANET", "CRWD", "PANW", "NET", "DDOG",
     "MDB", "MRVL", "IBM", "AMKR", "SMCI",
-    "AXON", "ISRG",
+    "AXON", "ISRG", "TSLA"
 ]
 
 # Full Nasdaq-100 list (as of late 2025)
