@@ -11,27 +11,48 @@ st.set_page_config(page_title="Tech Leadership Monitor", layout="wide")
 # -------------- TICKER STATUS + SESSION LOGIC ------------------
 
 
-def get_ticker_status(symbol: str, allow_single=False):
+def get_ticker_status(symbol: str, allow_single: bool = False):
+    """
+    Return (mode, price, change, change_pct, arrow) for a ticker.
+
+    mode: 'green', 'red', 'neutral'
+    arrow: ▲ / ▼ / ▶
+    """
     try:
         hist = yf.Ticker(symbol).history(period="2d")
         closes = hist["Close"].dropna()
+
+        # No data at all
         if len(closes) == 0:
             return "neutral", None, None, None, "▶"
+
+        # Only one close – can happen with futures
         if len(closes) == 1:
             if not allow_single:
                 return "neutral", None, None, None, "▶"
-            # no previous day -> change = 0
             price = float(closes.iloc[-1])
             return "neutral", price, 0.0, 0.0, "▶"
 
+        # Normal 2-day case
         prev_price = float(closes.iloc[-2])
         price = float(closes.iloc[-1])
         change = price - prev_price
         change_pct = (change / prev_price) * 100 if prev_price != 0 else 0.0
-        ...
+
+        if change > 0:
+            mode = "green"
+            arrow = "▲"
+        elif change < 0:
+            mode = "red"
+            arrow = "▼"
+        else:
+            mode = "neutral"
+            arrow = "▶"
+
+        return mode, price, change, change_pct, arrow
+
     except Exception:
         return "neutral", None, None, None, "▶"
-
 
 
 def is_regular_trading_hours():
@@ -40,7 +61,7 @@ def is_regular_trading_hours():
     Outside of this, we treat it as 'futures hours'.
     """
     now_et = pd.Timestamp.now(tz="US/Eastern")
-    if now_et.weekday() >= 5:  # 5=Saturday, 6=Sunday
+    if now_et.weekday() >= 5:  # 5=Sat, 6=Sun
         return False
     t = now_et.time()
     start = dt.time(9, 30)
@@ -50,10 +71,13 @@ def is_regular_trading_hours():
 
 # Fetch both QQQ and NQ futures, then choose which drives theme/header
 qqq_mode, qqq_price, qqq_change, qqq_change_pct, qqq_arrow = get_ticker_status("QQQ")
-fut_mode, fut_price, fut_change, fut_change_pct, fut_arrow = get_ticker_status("NQ=F", allow_single=True)
+fut_mode, fut_price, fut_change, fut_change_pct, fut_arrow = get_ticker_status(
+    "NQ=F", allow_single=True
+)
 
-if is_regular_trading_hours():
-    # Cash hours → QQQ rules the world
+# Decide which one is "active"
+if is_regular_trading_hours() or fut_price is None:
+    # Cash hours OR futures unavailable → use QQQ
     active_label = "QQQ"
     active_mode = qqq_mode
     active_price = qqq_price
@@ -62,10 +86,11 @@ if is_regular_trading_hours():
 else:
     # Futures hours → NQ=F powers theme + header, but we call it QQQ Futures
     active_label = "QQQ Futures"
-    active_mode = nq_mode
-    active_price = nq_price
-    active_change_pct = nq_change_pct
-    active_arrow = nq_arrow
+    active_mode = fut_mode
+    active_price = fut_price
+    active_change_pct = fut_change_pct
+    active_arrow = fut_arrow
+
 
 # Accent color based on ACTIVE driver
 if active_mode == "green":
@@ -155,7 +180,9 @@ st.markdown(cyberpunk_css, unsafe_allow_html=True)
 st.title("Tech Leadership Monitor")
 
 if active_price is not None and active_change_pct is not None:
-    st.subheader(f"{active_label} {active_arrow} {active_price:.2f} ({active_change_pct:+.2f}%)")
+    st.subheader(
+        f"{active_label} {active_arrow} {active_price:.2f} ({active_change_pct:+.2f}%)"
+    )
 else:
     st.subheader(f"{active_label} data unavailable — default neutral theme")
 
@@ -274,13 +301,11 @@ def color_tripolar(v, vmin, vmax):
     mid = 0.0
 
     if v < mid:
-        # vmin (most negative) -> RED, 0 -> BLACK
         if vmin >= mid:
             return ""
         t = (v - mid) / (vmin - mid)  # in [0,1]
         col = _blend(BLACK, RED, t)
     else:
-        # 0 -> BLACK, vmax -> GREEN
         if vmax <= mid:
             return ""
         t = (v - mid) / (vmax - mid)  # in [0,1]
@@ -389,17 +414,19 @@ def get_stock_summary(tickers):
                 fpe=fpe
             )
 
-            rows.append({
-                "Ticker": ticker,
-                "Price": price,
-                "% 5D": pct_5d,
-                "% 1M": pct_1m,
-                "% from 52w High": pct_from_52wk,
-                "RSI Zone": rsi_zone_str,
-                "Value Signal": value_signal,
-                "P/E": pe,
-                "Fwd P/E": fpe,
-            })
+            rows.append(
+                {
+                    "Ticker": ticker,
+                    "Price": price,
+                    "% 5D": pct_5d,
+                    "% 1M": pct_1m,
+                    "% from 52w High": pct_from_52wk,
+                    "RSI Zone": rsi_zone_str,
+                    "Value Signal": value_signal,
+                    "P/E": pe,
+                    "Fwd P/E": fpe,
+                }
+            )
 
         except Exception:
             continue
@@ -412,8 +439,14 @@ def get_stock_summary(tickers):
 BASE_COLUMN_CONFIG = {
     col: st.column_config.Column(width="fit")  # auto-size
     for col in [
-        "Price", "% 5D", "% 1M", "% from 52w High",
-        "RSI Zone", "Value Signal", "P/E", "Fwd P/E"
+        "Price",
+        "% 5D",
+        "% 1M",
+        "% from 52w High",
+        "RSI Zone",
+        "Value Signal",
+        "P/E",
+        "Fwd P/E",
     ]
 }
 
@@ -438,7 +471,6 @@ if not df.empty:
     df = df.set_index("Ticker")
     df_display = df.copy()
 
-    # Formatting
     format_dict = {
         "Price": "${:,.2f}",
         "% 5D": "{:.1f}%",
@@ -450,7 +482,7 @@ if not df.empty:
 
     styled = df_display.style.format(format_dict, na_rep="–")
 
-    # Heatmaps for % moves
+    # Heatmaps
     pct_cols = ["% 5D", "% 1M"]
     dist_col = "% from 52w High"
 
@@ -477,7 +509,7 @@ if not df.empty:
             axis=0,
         )
 
-    # Center ALL cells + headers (no special right-align for numbers)
+    # Center ALL cells + headers
     styled = styled.set_table_styles(
         [
             {"selector": "th.col_heading", "props": [("text-align", "center")]},
@@ -486,7 +518,6 @@ if not df.empty:
         overwrite=False,
     )
 
-    # RSI Zone colouring
     styled = styled.applymap(rsi_zone_style, subset=["RSI Zone"])
 
     column_config = build_column_config(df_display.columns)
@@ -514,7 +545,6 @@ with st.spinner("📡 Fetching Nasdaq-100 data..."):
     df_ndx = get_stock_summary(NASDAQ100_TICKERS)
 
 if not df_ndx.empty:
-    # Sort by deepest drawdown (most negative % from 52w High at top)
     df_ndx = df_ndx.sort_values("% from 52w High")
     df_ndx = df_ndx.set_index("Ticker")
     df_ndx_display = df_ndx.copy()
@@ -530,7 +560,6 @@ if not df_ndx.empty:
 
     styled_ndx = df_ndx_display.style.format(ndx_format_dict, na_rep="–")
 
-    # Heatmaps
     ndx_pct_cols = ["% 5D", "% 1M"]
     ndx_dist_col = "% from 52w High"
 
@@ -557,7 +586,6 @@ if not df_ndx.empty:
             axis=0,
         )
 
-    # Center ALL cells + headers
     styled_ndx = styled_ndx.set_table_styles(
         [
             {"selector": "th.col_heading", "props": [("text-align", "center")]},
@@ -593,3 +621,5 @@ st.markdown(
 - ⚪ **Neutral** – No strong edge from value or momentum.
 """
 )
+
+::contentReference[oaicite:0]{index=0}
