@@ -1,18 +1,19 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import datetime as dt
 from ta.momentum import RSIIndicator
 
 # -------------- PAGE CONFIG ------------------
 st.set_page_config(page_title="Tech Leadership Monitor", layout="wide")
 
 
-# -------------- GENERIC TICKER STATUS (QQQ + NQ FUTURES) ------------------
+# -------------- TICKER STATUS + SESSION LOGIC ------------------
 
 
 def get_ticker_status(symbol: str):
     """
-    Fetch last 2 days for a ticker/future and decide:
+    Fetch last 2 days of data for a ticker and decide:
     - mode: 'green', 'red', 'neutral'
     - price: latest close
     - change: absolute change vs previous close
@@ -45,14 +46,43 @@ def get_ticker_status(symbol: str):
         return "neutral", None, None, None, "▶"
 
 
-# QQQ (drives theme) and NQ futures (NQ=F, shown as NQ1!)
+def is_regular_trading_hours():
+    """
+    US market cash session: Mon–Fri, 09:30–16:00 US/Eastern.
+    Outside of this, we treat it as 'futures hours'.
+    """
+    now_et = pd.Timestamp.now(tz="US/Eastern")
+    if now_et.weekday() >= 5:  # 5=Saturday, 6=Sunday
+        return False
+    t = now_et.time()
+    start = dt.time(9, 30)
+    end = dt.time(16, 0)
+    return start <= t <= end
+
+
+# Fetch both QQQ and NQ futures, then choose which drives theme/header
 qqq_mode, qqq_price, qqq_change, qqq_change_pct, qqq_arrow = get_ticker_status("QQQ")
 nq_mode, nq_price, nq_change, nq_change_pct, nq_arrow = get_ticker_status("NQ=F")
 
-# Accent color based on QQQ (green = NVIDIA green)
-if qqq_mode == "green":
+if is_regular_trading_hours():
+    # Cash hours → QQQ rules the world
+    active_label = "QQQ"
+    active_mode = qqq_mode
+    active_price = qqq_price
+    active_change_pct = qqq_change_pct
+    active_arrow = qqq_arrow
+else:
+    # Futures hours → NQ=F powers theme + header, but we call it QQQ Futures
+    active_label = "QQQ Futures"
+    active_mode = nq_mode
+    active_price = nq_price
+    active_change_pct = nq_change_pct
+    active_arrow = nq_arrow
+
+# Accent color based on ACTIVE driver
+if active_mode == "green":
     accent = "#76B900"   # NVIDIA green
-elif qqq_mode == "red":
+elif active_mode == "red":
     accent = "#ef4444"   # soft red
 else:
     accent = "#0ea5e9"   # cyan/blue
@@ -136,20 +166,11 @@ st.markdown(cyberpunk_css, unsafe_allow_html=True)
 
 st.title("Tech Leadership Monitor")
 
-sub_parts = []
-
-if qqq_price is not None and qqq_change_pct is not None:
-    sub_parts.append(f"QQQ {qqq_arrow} {qqq_price:.2f} ({qqq_change_pct:+.2f}%)")
+if active_price is not None and active_change_pct is not None:
+    st.subheader(f"{active_label} {active_arrow} {active_price:.2f} ({active_change_pct:+.2f}%)")
 else:
-    sub_parts.append("QQQ data unavailable")
+    st.subheader(f"{active_label} data unavailable — default neutral theme")
 
-if nq_price is not None and nq_change_pct is not None:
-    # Show TradingView-style name but use NQ=F data
-    sub_parts.append(f"NQ1! {nq_arrow} {nq_price:.2f} ({nq_change_pct:+.2f}%)")
-else:
-    sub_parts.append("NQ1! data unavailable")
-
-st.subheader("  |  ".join(sub_parts))
 st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
@@ -401,7 +422,7 @@ def get_stock_summary(tickers):
 # -------------- COMMON COLUMN CONFIG ------------------
 
 BASE_COLUMN_CONFIG = {
-    col: st.column_config.Column(width="fit")  # auto size for all key columns
+    col: st.column_config.Column(width="fit")  # auto-size
     for col in [
         "Price", "% 5D", "% 1M", "% from 52w High",
         "RSI Zone", "Value Signal", "P/E", "Fwd P/E"
@@ -416,7 +437,7 @@ def build_column_config(columns):
         if col in BASE_COLUMN_CONFIG:
             cfg[col] = BASE_COLUMN_CONFIG[col]
         else:
-            cfg[col] = st.column_config.Column(width=140)
+            cfg[col] = st.column_config.Column(width="fit")
     return cfg
 
 
@@ -468,14 +489,13 @@ if not df.empty:
             axis=0,
         )
 
-    # Right-align numeric columns and center headers
-    numeric_cols = ["Price", "% 5D", "% 1M", "% from 52w High", "P/E", "Fwd P/E"]
-    styled = (
-        styled.set_table_styles(
-            [{"selector": "th.col_heading", "props": [("text-align", "center")]}],
-            overwrite=False,
-        )
-        .set_properties(subset=numeric_cols, **{"text-align": "right"})
+    # Center ALL cells + headers (no special right-align for numbers)
+    styled = styled.set_table_styles(
+        [
+            {"selector": "th.col_heading", "props": [("text-align", "center")]},
+            {"selector": "td", "props": [("text-align", "center")]},
+        ],
+        overwrite=False,
     )
 
     # RSI Zone colouring
@@ -549,13 +569,13 @@ if not df_ndx.empty:
             axis=0,
         )
 
-    ndx_numeric_cols = ["Price", "% 5D", "% 1M", "% from 52w High", "P/E", "Fwd P/E"]
-    styled_ndx = (
-        styled_ndx.set_table_styles(
-            [{"selector": "th.col_heading", "props": [("text-align", "center")]}],
-            overwrite=False,
-        )
-        .set_properties(subset=ndx_numeric_cols, **{"text-align": "right"})
+    # Center ALL cells + headers
+    styled_ndx = styled_ndx.set_table_styles(
+        [
+            {"selector": "th.col_heading", "props": [("text-align", "center")]},
+            {"selector": "td", "props": [("text-align", "center")]},
+        ],
+        overwrite=False,
     )
 
     styled_ndx = styled_ndx.applymap(rsi_zone_style, subset=["RSI Zone"])
