@@ -11,39 +11,27 @@ st.set_page_config(page_title="Tech Leadership Monitor", layout="wide")
 # -------------- TICKER STATUS + SESSION LOGIC ------------------
 
 
-def get_ticker_status(symbol: str):
-    """
-    Fetch last 2 days of data for a ticker and decide:
-    - mode: 'green', 'red', 'neutral'
-    - price: latest close
-    - change: absolute change vs previous close
-    - change_pct: percentage change
-    - arrow: '▲' / '▼' / '▶'
-    """
+def get_ticker_status(symbol: str, allow_single=False):
     try:
         hist = yf.Ticker(symbol).history(period="2d")
         closes = hist["Close"].dropna()
-        if len(closes) < 2:
+        if len(closes) == 0:
             return "neutral", None, None, None, "▶"
+        if len(closes) == 1:
+            if not allow_single:
+                return "neutral", None, None, None, "▶"
+            # no previous day -> change = 0
+            price = float(closes.iloc[-1])
+            return "neutral", price, 0.0, 0.0, "▶"
 
         prev_price = float(closes.iloc[-2])
         price = float(closes.iloc[-1])
         change = price - prev_price
         change_pct = (change / prev_price) * 100 if prev_price != 0 else 0.0
-
-        if change > 0:
-            mode = "green"
-            arrow = "▲"
-        elif change < 0:
-            mode = "red"
-            arrow = "▼"
-        else:
-            mode = "neutral"
-            arrow = "▶"
-
-        return mode, price, change, change_pct, arrow
+        ...
     except Exception:
         return "neutral", None, None, None, "▶"
+
 
 
 def is_regular_trading_hours():
@@ -62,7 +50,7 @@ def is_regular_trading_hours():
 
 # Fetch both QQQ and NQ futures, then choose which drives theme/header
 qqq_mode, qqq_price, qqq_change, qqq_change_pct, qqq_arrow = get_ticker_status("QQQ")
-nq_mode, nq_price, nq_change, nq_change_pct, nq_arrow = get_ticker_status("NQ=F")
+fut_mode, fut_price, fut_change, fut_change_pct, fut_arrow = get_ticker_status("NQ=F", allow_single=True)
 
 if is_regular_trading_hours():
     # Cash hours → QQQ rules the world
