@@ -568,13 +568,7 @@ else:
 st.markdown("---")
 st.markdown(
     """
-### 📘 How to read the signals
 
-**RSI Zone (merged numeric + label)**  
-- `25.3 – Oversold` → washed out, possible mean-reversion zone  
-- `35–50 – Watch` → still weak, but not extreme  
-- `50–70 – Trend` → healthy uptrend  
-- `> 70 – Overbought` → hot / extended, risk of pullback  
 
 **Value Signal (combined value + momentum)**  
 - 💚 **Deep value pullback** – Big drawdown vs 52-week high, low forward P/E, weak RSI.  
@@ -583,7 +577,5 @@ st.markdown(
 - 🔴 **Hot / extended** – Near highs and/or expensive forward P/E, or overbought RSI.  
 - ⚪ **Neutral** – No strong edge from value or momentum.
 
-Use the **top table** for your core AI / infra names, and the **Nasdaq-100 table** as a hunting ground
-for “why is this down 40–50% from highs but still fundamentally good?” candidates.
 """
 )
