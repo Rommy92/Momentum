@@ -391,14 +391,14 @@ def get_stock_summary(tickers):
 
 # Explicit sizes you can tweak any time
 BASE_COLUMN_CONFIG = {
-    "Price": st.column_config.Column(width=60),
-    "% 5D": st.column_config.Column(width=50),
-    "% 1M": st.column_config.Column(width=50),
-    "% from 52w High": st.column_config.Column(width=110),
-    "RSI Zone": st.column_config.Column(width=120),
-    "Value Signal": st.column_config.Column(width=150),
-    "P/E": st.column_config.Column(width=35),
-    "Fwd P/E": st.column_config.Column(width=35),
+    "Price": st.column_config.Column(width=25),
+    "% 5D": st.column_config.Column(width=20),
+    "% 1M": st.column_config.Column(width=20),
+    "% from 52w High": st.column_config.Column(width=50),
+    "RSI Zone": st.column_config.Column(width=60),
+    "Value Signal": st.column_config.Column(width=80),
+    "P/E": st.column_config.Column(width=15),
+    "Fwd P/E": st.column_config.Column(width=20),
 }
 
 
@@ -494,7 +494,6 @@ st.markdown(
     "NASDAQ-100 DEEP DRAWDOWN TABLE</h1>",
     unsafe_allow_html=True,
 )
-st.subheader("Nasdaq-100 Deep Drawdown Scanner")
 
 with st.spinner("📡 Fetching Nasdaq-100 data..."):
     df_ndx = get_stock_summary(NASDAQ100_TICKERS)
