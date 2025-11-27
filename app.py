@@ -69,13 +69,30 @@ def is_regular_trading_hours():
     return start <= t <= end
 
 
-# Fetch both QQQ and NQ futures, then choose which drives theme/header
+# Fetch QQQ and NQ futures
 qqq_mode, qqq_price, qqq_change, qqq_change_pct, qqq_arrow = get_ticker_status("QQQ")
 fut_mode, fut_price, fut_change, fut_change_pct, fut_arrow = get_ticker_status(
     "NQ=F", allow_single=True
 )
 
-# Decide which one is "active"
+# SMH status
+smh_mode, smh_price, smh_change, smh_change_pct, smh_arrow = get_ticker_status("SMH")
+
+# Macro / sector ETFs for the strip
+MACRO_ETFS = [
+    ("ARKK", "High-Beta Growth"),
+    ("XLK", "Tech"),
+    ("XLF", "Financials"),
+    ("XLE", "Energy"),
+    ("TLT", "Bonds"),
+    ("UUP", "US Dollar"),
+]
+
+macro_status = {}
+for t, label in MACRO_ETFS:
+    macro_status[t] = get_ticker_status(t)
+
+# Decide which one is "active" (drives theme/header)
 if is_regular_trading_hours() or fut_price is None:
     # Cash hours OR futures unavailable → use QQQ
     active_label = "QQQ"
@@ -175,10 +192,43 @@ h3, h4 {{
 st.markdown(cyberpunk_css, unsafe_allow_html=True)
 
 
-# -------------- TITLE + SUBHEADER ------------------
+# -------------- SIDEBAR: BUY-ZONE FILTER CONTROLS ------------------
+
+with st.sidebar:
+    st.header("Buy-Zone Filters")
+    min_dd = st.slider(
+        "Min drawdown from 52w High (%)",
+        min_value=-80,
+        max_value=0,
+        value=-25,
+        step=1,
+        help="Stocks must be at least this much below their 52-week high.",
+    )
+    max_fpe = st.slider(
+        "Max Forward P/E",
+        min_value=5,
+        max_value=80,
+        value=40,
+        step=1,
+        help="Upper limit for forward P/E in buy-zone candidates.",
+    )
+    only_value = st.checkbox(
+        "Only show value signals (💚 / 🟡)",
+        value=False,
+        help="Filter to Deep value pullback and Value watch.",
+    )
+    buy_universe = st.radio(
+        "Universe for Buy-Zone Candidates",
+        options=["Tech leaders only", "Nasdaq-100", "Both"],
+        index=0,
+    )
+
+
+# -------------- TITLE + MARKET REGIME HEADER ------------------
 
 st.title("Tech Leadership Monitor")
 
+# Main active driver (QQQ / QQQ Futures)
 if active_price is not None and active_change_pct is not None:
     st.subheader(
         f"{active_label} {active_arrow} {active_price:.2f} ({active_change_pct:+.2f}%)"
@@ -186,10 +236,63 @@ if active_price is not None and active_change_pct is not None:
 else:
     st.subheader(f"{active_label} data unavailable — default neutral theme")
 
+# SMH status + spread vs active driver
+if smh_price is not None and smh_change_pct is not None:
+    if active_change_pct is not None:
+        smh_spread = smh_change_pct - active_change_pct
+        smh_spread_str = f"{smh_spread:+.2f} pp vs {active_label}"
+    else:
+        smh_spread_str = "spread vs benchmark unavailable"
+
+    st.caption(
+        f"SMH {smh_arrow} {smh_price:.2f} ({smh_change_pct:+.2f}%) — {smh_spread_str}"
+    )
+
 st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
+# Macro / sector strip
+cols = st.columns(len(MACRO_ETFS))
+for (ticker, label), col in zip(MACRO_ETFS, cols):
+    mode, price, _, chg_pct, arrow = macro_status[ticker]
+    with col:
+        if price is None or chg_pct is None:
+            st.markdown(
+                f"<div style='border:1px solid #1f2933; padding:0.5rem; "
+                f"border-radius:0.5rem; background-color:#050505;'>"
+                f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
+                f"<div style='font-weight:600; color:#9ca3af;'>{ticker} data unavailable</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            # Colour by daily move
+            if chg_pct > 0:
+                txt_color = "#22c55e"
+            elif chg_pct < 0:
+                txt_color = "#ef4444"
+            else:
+                txt_color = "#e5e5e5"
 
-# -------------- TICKERS ------------------
+            if active_change_pct is not None:
+                spread = chg_pct - active_change_pct
+                spread_str = f"{spread:+.2f} pp vs {active_label}"
+            else:
+                spread_str = "spread vs benchmark unavailable"
+
+            col_html = (
+                f"<div style='border:1px solid #1f2933; padding:0.5rem; "
+                f"border-radius:0.5rem; background-color:#050505;'>"
+                f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
+                f"<div style='font-weight:600; color:{txt_color};'>"
+                f"{ticker} {arrow} {price:.2f} ({chg_pct:+.2f}%)"
+                f"</div>"
+                f"<div style='font-size:0.75rem; color:#9ca3af;'>{spread_str}</div>"
+                f"</div>"
+            )
+            st.markdown(col_html, unsafe_allow_html=True)
+
+
+# -------------- TICKER UNIVERSES ------------------
 
 TOP_TECH_TICKERS = [
     "MSFT", "AMZN", "GOOG", "NVDA", "META",
@@ -224,10 +327,11 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     if rsi is None or pct_from_high is None:
         return "❔ Check data"
 
-    if rsi < 35 and pct_from_high <= -30 and (fpe is not None and fpe <= 30):
+    # Allow missing Fwd P/E to still flag deep value
+    if rsi < 35 and pct_from_high <= -30 and (fpe is None or fpe <= 30):
         return "💚 Deep value pullback"
 
-    if rsi < 50 and pct_from_high <= -15 and (fpe is not None and fpe <= 35):
+    if rsi < 50 and pct_from_high <= -15 and (fpe is None or fpe <= 35):
         return "🟡 Value watch"
 
     if 50 <= rsi <= 70 and (pct_1m is not None and pct_1m > 0):
@@ -464,12 +568,19 @@ def build_column_config(columns):
 
 # -------------- TABLE 1: TECH LEADERSHIP MONITOR ------------------
 
+df = pd.DataFrame()
+df_ndx = pd.DataFrame()
+
+st.markdown("---")
+st.markdown("## Tech Leadership Table – Megacap & Core Names")
+
 with st.spinner("📡 Fetching data for Tech Leadership Monitor..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
 if not df.empty:
     df = df.set_index("Ticker")
-    df_display = df.copy()
+    # Sort by drawdown: deepest first
+    df_display = df.sort_values("% from 52w High")
 
     format_dict = {
         "Price": "${:,.2f}",
@@ -536,8 +647,8 @@ else:
 
 st.markdown("---")
 st.markdown(
-    "<h1 style='text-align:left; text-shadow:0 0 8px #76B900;'>"
-    "NASDAQ-100 DEEP DRAWDOWN TABLE</h1>",
+    "<h2 style='text-align:left; text-shadow:0 0 8px #76B900;'>"
+    "NASDAQ-100 DEEP DRAWDOWN RADAR</h2>",
     unsafe_allow_html=True,
 )
 
@@ -608,17 +719,102 @@ else:
     st.write("No Nasdaq-100 data loaded.")
 
 
+# -------------- BUY-ZONE CANDIDATES ------------------
+
+st.markdown("---")
+st.markdown("## Buy-Zone Candidates (Screened by Your Rules)")
+
+def build_buy_candidates(df_tech, df_nasdaq):
+    # Decide source universe
+    sources = []
+    if buy_universe in ("Tech leaders only", "Both") and df_tech is not None and not df_tech.empty:
+        sources.append(df_tech.copy())
+    if buy_universe in ("Nasdaq-100", "Both") and df_nasdaq is not None and not df_nasdaq.empty:
+        sources.append(df_nasdaq.copy())
+
+    if not sources:
+        return pd.DataFrame()
+
+    base = pd.concat(sources, axis=0)
+    base = base[~base.index.duplicated(keep="first")]  # avoid duplicates if any
+
+    # Extract numeric RSI from "RSI Zone"
+    rsi_numeric = base["RSI Zone"].str.extract(r"([\d.]+)").astype(float)[0]
+    base["RSI_numeric"] = rsi_numeric
+
+    # Filter by drawdown and RSI
+    mask = pd.Series(True, index=base.index)
+
+    # Drawdown: <= min_dd (min_dd is negative)
+    mask &= base["% from 52w High"] <= float(min_dd)
+
+    # RSI not overheated (e.g., < 55)
+    mask &= base["RSI_numeric"] < 55
+
+    # Fwd P/E constraint
+    mask &= base["Fwd P/E"].notna()
+    mask &= base["Fwd P/E"] <= float(max_fpe)
+
+    # Optionally restrict to value signals
+    if only_value:
+        mask &= base["Value Signal"].str.contains(
+            "Deep value pullback|Value watch", na=False
+        )
+
+    candidates = base.loc[mask].copy()
+    if candidates.empty:
+        return candidates
+
+    candidates = candidates.sort_values("% from 52w High")
+
+    return candidates
+
+
+if df is not None and df_ndx is not None:
+    candidates = build_buy_candidates(df, df_ndx)
+else:
+    candidates = pd.DataFrame()
+
+if not candidates.empty:
+    # Show only key columns
+    show_cols = ["Price", "% from 52w High", "RSI Zone", "Fwd P/E", "Value Signal"]
+    candidates_display = candidates[show_cols]
+
+    cand_format = {
+        "Price": "${:,.2f}",
+        "% from 52w High": "{:.1f}%",
+        "Fwd P/E": "{:.1f}",
+    }
+
+    cand_styled = candidates_display.style.format(cand_format, na_rep="–")
+    cand_styled = cand_styled.set_table_styles(
+        [
+            {"selector": "th.col_heading", "props": [("text-align", "center")]},
+            {"selector": "td", "props": [("text-align", "center")]},
+        ],
+        overwrite=False,
+    )
+    cand_styled = cand_styled.applymap(rsi_zone_style, subset=["RSI Zone"])
+
+    st.dataframe(
+        cand_styled,
+        use_container_width=True,
+        height=400,
+    )
+else:
+    st.write("No tickers currently match your buy-zone criteria. Adjust filters in the sidebar to widen the search.")
+
+
 # -------------- HOW TO READ THE SIGNALS ------------------
 
 st.markdown("---")
 st.markdown(
     """
 **Value Signal (combined value + momentum)**  
-- 💚 **Deep value pullback** – Big drawdown vs 52-week high, low forward P/E, weak RSI.  
+- 💚 **Deep value pullback** – Big drawdown vs 52-week high, low or reasonable forward P/E, weak RSI.  
 - 🟡 **Value watch** – Decent pullback, valuation reasonable but not screaming.  
 - 🔵 **Momentum trend** – Positive 1-month performance with RSI in 50–70 zone.  
 - 🔴 **Hot / extended** – Near highs and/or expensive forward P/E, or overbought RSI.  
 - ⚪ **Neutral** – No strong edge from value or momentum.
 """
 )
-
