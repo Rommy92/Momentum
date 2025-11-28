@@ -46,8 +46,6 @@ def get_ticker_status(symbol: str):
     Realtime-like status.
 
     Priority 1: use Yahoo 'regularMarket*' fields from get_info()
-                (this matches what Yahoo shows on the website and
-                 works well for futures/indices/ETFs).
     Priority 2: fall back to 2-day daily history + 1m intraday.
 
     Returns (mode, price, change, change_pct, arrow).
@@ -68,7 +66,6 @@ def get_ticker_status(symbol: str):
             if change is not None:
                 change = float(change)
             else:
-                # Derive change if only percent is given
                 try:
                     prev_close = price / (1 + change_pct / 100.0)
                     change = price - prev_close
@@ -87,7 +84,6 @@ def get_ticker_status(symbol: str):
 
             return mode, price, change, change_pct, arrow
     except Exception:
-        # fall through to path 2
         pass
 
     # --------- PATH 2: 2d daily + 1m intraday ----------
@@ -133,8 +129,8 @@ def get_ticker_status(symbol: str):
 @st.cache_data(ttl=300)
 def get_market_state(symbol: str):
     """
-    Determine if a market is Open/Closed based on Yahoo's marketState when available.
-    If unknown, default to Closed (we only care about a clear visual).
+    Determine if a market is Open/Closed based on Yahoo's marketState.
+    If unknown, default to Closed.
     """
     try:
         t = yf.Ticker(symbol)
@@ -155,7 +151,7 @@ def is_regular_trading_hours():
     US market cash session: Mon–Fri, 09:30–16:00 US/Eastern.
     """
     now_et = pd.Timestamp.now(tz="US/Eastern")
-    if now_et.weekday() >= 5:  # 5=Sat, 6=Sun
+    if now_et.weekday() >= 5:
         return False
     t = now_et.time()
     start = dt.time(9, 30)
@@ -163,7 +159,7 @@ def is_regular_trading_hours():
     return start <= t <= end
 
 
-# Main market driver: QQQ vs NQ futures
+# Decide QQQ vs NQ futures
 qqq_mode, qqq_price, qqq_change, qqq_change_pct, qqq_arrow = get_ticker_status("QQQ")
 fut_mode, fut_price, fut_change, fut_change_pct, fut_arrow = get_ticker_status("NQ=F")
 
@@ -185,11 +181,11 @@ else:
 
 # Accent color based on ACTIVE driver
 if active_mode == "green":
-    accent = "#76B900"   # NVIDIA green
+    accent = "#76B900"
 elif active_mode == "red":
-    accent = "#ef4444"   # soft red
+    accent = "#ef4444"
 else:
-    accent = "#0ea5e9"   # cyan/blue
+    accent = "#0ea5e9"
 
 
 # -------------- CYBERPUNK CSS ------------------
@@ -275,9 +271,7 @@ with st.sidebar:
         step=1,
         help="Minimum discount from 52-week high required (move right for bigger discount).",
     )
-    # Convert to negative for comparisons with "% from 52w High"
     min_dd = -float(dd_required)
-
     max_fpe = st.slider(
         "Max Forward P/E",
         min_value=5,
@@ -301,7 +295,6 @@ with st.sidebar:
 # -------------- TITLE + HEADER ------------------
 
 st.title("Global Tech & Macro Dashboard")
-
 st.caption(
     f"<p style='text-align:center;'>Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
     unsafe_allow_html=True,
@@ -331,29 +324,33 @@ GLOBAL_INDICES = [
     ("^FTSE", "UK (FTSE 100)"),
 ]
 
-# Fetch realtime status for all *real* symbols
+# Status map for all real symbols
 real_symbols = [t for t, _ in US_MACRO_ETFS if t != "MARKET"] + [t for t, _ in GLOBAL_INDICES]
 status_map = {sym: get_ticker_status(sym) for sym in real_symbols}
-# MARKET uses active_* already computed
 status_map["MARKET"] = (active_mode, active_price, None, active_change_pct, active_arrow)
 
-# Fallback for China: if ^SSEC has no price, try 000001.SS
+# China fallback
 mode_ssec, price_ssec, chg_ssec, chg_pct_ssec, arr_ssec = status_map.get("^SSEC", (None, None, None, None, None))
 if price_ssec is None:
-    fallback = get_ticker_status("000001.SS")
-    if fallback[1] is not None:
-        status_map["^SSEC"] = fallback
+    fb = get_ticker_status("000001.SS")
+    if fb[1] is not None:
+        status_map["^SSEC"] = fb
 
-# Market state (Open/Closed) for all symbols
 market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
-# MARKET state derived from underlying symbol (QQQ or NQ=F) – we will override to "Open" on the card
 market_state_map["MARKET"] = get_market_state(active_symbol)
 
 
 st.markdown("### US Macro & Sector Pulse")
 
 
-def render_card(label, ticker_display, status_tuple, market_state: str):
+def render_card(label, ticker_display, status_tuple, market_state: str, show_state: bool):
+    """
+    Card renderer.
+
+    - Colours label by % move.
+    - If show_state is True and market_state == 'Closed' -> appends red '· Closed'.
+    - Never prints 'Open' anywhere.
+    """
     mode, price, _, chg_pct, arrow = status_tuple
     if price is None or chg_pct is None:
         html = (
@@ -365,7 +362,6 @@ def render_card(label, ticker_display, status_tuple, market_state: str):
         )
         return html
 
-    # Colour by daily move
     if chg_pct > 0:
         txt_color = "#22c55e"
     elif chg_pct < 0:
@@ -373,8 +369,7 @@ def render_card(label, ticker_display, status_tuple, market_state: str):
     else:
         txt_color = "#e5e5e5"
 
-    # Only show red '· Closed'; open = nothing
-    if market_state == "Closed":
+    if show_state and market_state == "Closed":
         state_html = "<span style='color:#ef4444;'> · Closed</span>"
     else:
         state_html = ""
@@ -399,17 +394,19 @@ for i in range(0, len(US_MACRO_ETFS), cards_per_row):
     for (ticker, label), col in zip(row, cols):
         with col:
             if ticker == "MARKET":
-                # Never show Closed/Open for the main market card; it’s always “live pulse”
-                display_ticker = active_label  # 'QQQ' or 'QQQ Futures'
+                # Main market card: NEVER show Closed/Open text
+                display_ticker = active_label
                 display_label = "Market (QQQ / QQQ Futures)"
-                state_for_card = "Open"
+                state_for_card = market_state_map["MARKET"]
+                show_state = False
             else:
                 display_ticker = ticker
                 display_label = label
                 state_for_card = market_state_map[ticker]
+                show_state = True
 
             st.markdown(
-                render_card(display_label, display_ticker, status_map[ticker], state_for_card),
+                render_card(display_label, display_ticker, status_map[ticker], state_for_card, show_state),
                 unsafe_allow_html=True,
             )
 
@@ -421,7 +418,7 @@ for i in range(0, len(GLOBAL_INDICES), cards_per_row):
     for (ticker, label), col in zip(row, cols):
         with col:
             st.markdown(
-                render_card(label, ticker, status_map[ticker], market_state_map[ticker]),
+                render_card(label, ticker, status_map[ticker], market_state_map[ticker], True),
                 unsafe_allow_html=True,
             )
 
@@ -453,8 +450,7 @@ NASDAQ100_TICKERS = [
 ]
 
 
-# -------------- HELPERS ------------------
-
+# -------------- HELPERS FOR TABLES ------------------
 
 def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     if rsi is None or pct_from_high is None:
@@ -545,9 +541,6 @@ def color_bipolar(v, vmin, vmax):
     return _rgb_css(col)
 
 
-# -------------- DATA FETCH FOR TABLES ------------------
-
-
 @st.cache_data(ttl=60)
 def get_stock_summary(tickers):
     rows = []
@@ -555,7 +548,6 @@ def get_stock_summary(tickers):
     for ticker in tickers:
         try:
             stock = yf.Ticker(ticker)
-            # Reuse realtime status for current price and 1D move
             _, price_rt, _, change_pct_rt, _ = get_ticker_status(ticker)
 
             hist = stock.history(period="1y")
