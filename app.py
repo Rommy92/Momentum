@@ -938,7 +938,6 @@ else:
         "Loosen filters in the sidebar to widen the search."
     )
 
-
 # -------------- HOW TO READ THE SIGNALS ------------------
 
 st.markdown("---")
