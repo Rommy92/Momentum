@@ -337,9 +337,16 @@ status_map = {sym: get_ticker_status(sym) for sym in real_symbols}
 # MARKET uses active_* already computed
 status_map["MARKET"] = (active_mode, active_price, None, active_change_pct, active_arrow)
 
+# Fallback for China: if ^SSEC has no price, try 000001.SS
+mode_ssec, price_ssec, chg_ssec, chg_pct_ssec, arr_ssec = status_map.get("^SSEC", (None, None, None, None, None))
+if price_ssec is None:
+    fallback = get_ticker_status("000001.SS")
+    if fallback[1] is not None:
+        status_map["^SSEC"] = fallback
+
 # Market state (Open/Closed) for all symbols
 market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
-# MARKET state derived from underlying symbol (QQQ or NQ=F)
+# MARKET state derived from underlying symbol (QQQ or NQ=F) – we will override to "Open" on the card
 market_state_map["MARKET"] = get_market_state(active_symbol)
 
 
@@ -366,7 +373,7 @@ def render_card(label, ticker_display, status_tuple, market_state: str):
     else:
         txt_color = "#e5e5e5"
 
-    # Only show a red "· Closed". When open, show nothing extra.
+    # Only show red '· Closed'; open = nothing
     if market_state == "Closed":
         state_html = "<span style='color:#ef4444;'> · Closed</span>"
     else:
@@ -392,14 +399,17 @@ for i in range(0, len(US_MACRO_ETFS), cards_per_row):
     for (ticker, label), col in zip(row, cols):
         with col:
             if ticker == "MARKET":
+                # Never show Closed/Open for the main market card; it’s always “live pulse”
                 display_ticker = active_label  # 'QQQ' or 'QQQ Futures'
                 display_label = "Market (QQQ / QQQ Futures)"
+                state_for_card = "Open"
             else:
                 display_ticker = ticker
                 display_label = label
+                state_for_card = market_state_map[ticker]
 
             st.markdown(
-                render_card(display_label, display_ticker, status_map[ticker], market_state_map[ticker]),
+                render_card(display_label, display_ticker, status_map[ticker], state_for_card),
                 unsafe_allow_html=True,
             )
 
