@@ -392,7 +392,7 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
 
 cards_per_row = 4
 for i in range(0, len(US_MACRO_ETFS), cards_per_row):
-    row = US_MACRO_ETFS[i : i + cards_per_row]
+    row = US_MACRO_ETFS[i: i + cards_per_row]
     cols = st.columns(len(row))
     for (ticker, label), col in zip(row, cols):
         with col:
@@ -415,7 +415,7 @@ for i in range(0, len(US_MACRO_ETFS), cards_per_row):
 st.markdown("### Global Indices Pulse")
 
 for i in range(0, len(GLOBAL_INDICES), cards_per_row):
-    row = GLOBAL_INDICES[i : i + cards_per_row]
+    row = GLOBAL_INDICES[i: i + cards_per_row]
     cols = st.columns(len(row))
     for (ticker, label), col in zip(row, cols):
         with col:
@@ -774,7 +774,7 @@ BASE_COLUMN_CONFIG = {
     col: st.column_config.Column(width="fit")
     for col in [
         "Price",        # still used in Buy-Zone section
-        "Price & 1D",   # new combined column for main tables
+        "Price & 1D",   # combined column for main tables
         "% 1D",
         "% 5D",
         "% 1M",
@@ -801,7 +801,7 @@ def build_column_config(columns):
 def price_style(row):
     val = row.get("% 1D", None)
     if pd.isna(val):
-        return [""]
+        return [""]  # no style
     if val > 0:
         return ["color: #22c55e; font-weight: 600;"]
     if val < 0:
@@ -819,7 +819,7 @@ def pct1d_style(val):
     return "color: #e5e5e5; font-weight: 600;"
 
 
-# NEW: style for combined "Price & 1D" column
+# Style for combined "Price & 1D" column
 def price_1d_style(val):
     """
     Style for 'Price & 1D' column:
@@ -873,9 +873,23 @@ if not df.empty:
 
     df_display = df_sorted.drop(columns=["Market Cap"], errors="ignore")
 
-    # --- NEW: combined column ---
+    # --- combined column ---
     df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
     df_display = df_display.drop(columns=["Price", "% 1D"])
+
+    # --- REORDER: move Price & 1D next to Ticker (first data column) ---
+    desired_order = [
+        "Price & 1D",
+        "% 5D",
+        "% 1M",
+        "% from 52w High",
+        "RSI Zone",
+        "Value Signal",
+        "P/E",
+        "Fwd P/E",
+    ]
+    existing_cols = [c for c in desired_order if c in df_display.columns]
+    df_display = df_display[existing_cols]
 
     format_dict = {
         "Price & 1D": "{}",
@@ -949,9 +963,23 @@ if not df_ndx.empty:
     df_ndx = df_ndx.sort_values("% from 52w High")
     df_ndx_display = df_ndx.drop(columns=["Market Cap"], errors="ignore")
 
-    # --- NEW: combined column for Nasdaq table ---
+    # combined column for Nasdaq table
     df_ndx_display["Price & 1D"] = df_ndx_display.apply(format_price_1d, axis=1)
     df_ndx_display = df_ndx_display.drop(columns=["Price", "% 1D"])
+
+    # REORDER: Price & 1D first
+    desired_order_ndx = [
+        "Price & 1D",
+        "% 5D",
+        "% 1M",
+        "% from 52w High",
+        "RSI Zone",
+        "Value Signal",
+        "P/E",
+        "Fwd P/E",
+    ]
+    existing_ndx = [c for c in desired_order_ndx if c in df_ndx_display.columns]
+    df_ndx_display = df_ndx_display[existing_ndx]
 
     ndx_format_dict = {
         "Price & 1D": "{}",
