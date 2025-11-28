@@ -707,51 +707,37 @@ def get_stock_summary(tickers):
             except Exception:
                 market_cap = None
 
-            # ---------- FORWARD EPS (+1y) & APPROX (+2y) ----------
-            eps_plus1 = None
-            eps_plus2 = None
-
-            forward_eps = None
-            try:
-                fe = info.get("forwardEps", None)
-                if fe is not None:
-                    forward_eps = float(fe)
-            except Exception:
-                forward_eps = None
-
-            if forward_eps is not None and forward_eps > 0:
-                eps_plus1 = forward_eps
-
-                # approximate +2y EPS using earningsGrowth or default
-                growth = info.get("earningsGrowth", None)
-                try:
-                    if growth is not None:
-                        growth = float(growth)
-                    else:
-                        growth = DEFAULT_GROWTH
-                except Exception:
-                    growth = DEFAULT_GROWTH
-
-                # clip growth to avoid insane outliers
-                growth = max(-0.5, min(1.0, growth))
-
-                eps_plus2 = forward_eps * (1.0 + growth)
-
-            # Forward P/Es
+            # ---------- FORWARD VALUATION: forwardPE + earningsGrowth ----------
             fpe_1y = None
             fpe_2y = None
+            eps_plus2 = None
 
-            if eps_plus1 is not None and eps_plus1 > 0:
-                try:
-                    fpe_1y = round(price / eps_plus1, 2)
-                except ZeroDivisionError:
-                    fpe_1y = None
+            fpe_raw = info.get("forwardPE", None)
+            try:
+                if fpe_raw is not None:
+                    fpe_1y = float(fpe_raw)
+            except Exception:
+                fpe_1y = None
 
-            if eps_plus2 is not None and eps_plus2 > 0:
-                try:
+            growth = info.get("earningsGrowth", None)
+            try:
+                if growth is not None:
+                    growth = float(growth)
+                else:
+                    growth = DEFAULT_GROWTH
+            except Exception:
+                growth = DEFAULT_GROWTH
+
+            # clip growth to avoid insane outliers
+            growth = max(-0.5, min(1.0, growth))
+
+            eps_plus1 = None
+            if fpe_1y is not None and fpe_1y > 0 and price is not None:
+                eps_plus1 = price / fpe_1y
+                eps_plus2 = eps_plus1 * (1.0 + growth)
+                if eps_plus2 > 0:
                     fpe_2y = round(price / eps_plus2, 2)
-                except ZeroDivisionError:
-                    fpe_2y = None
+                fpe_1y = round(fpe_1y, 2)
 
             # Fair value based on +2y EPS
             fair_val_2y, discount_pct = calculate_fair_value_from_eps2(
@@ -818,11 +804,9 @@ if not df.empty:
     # Combined Price & 1D column
     df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
 
-    # We still need Price and %1D for the Buy-Zone section, so keep them in df,
-    # but not in this visible table.
+    # We still need Price and %1D later, but not in this visible table.
     df_display_for_view = df_display.drop(columns=["Price", "% 1D"])
 
-    # Explicit column order for the visible table
     desired_order = [
         "Price & 1D",
         "% 5D",
@@ -872,8 +856,8 @@ if not df.empty:
         vmax = 0.0
         styled = styled.apply(
             lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
-                subset=[dist_col],
-                axis=0,
+            subset=[dist_col],
+            axis=0,
         )
 
     styled = styled.set_table_styles(
@@ -1089,10 +1073,12 @@ st.markdown(
     f"""
 ### 🧠 Signal Logic & Fair Value
 
-- **Fwd P/E (+1y)** – price divided by analysts' next-year EPS (`forwardEps`).
-- **Fwd P/E (+2y)** – price divided by an approximate +2y EPS
-  (we take `forwardEps` and grow it once by `earningsGrowth`, or {DEFAULT_GROWTH:.0%} if missing).
-- **Fair Val (+2y)** – EPS(+2y) × {FAIR_PE_MULTIPLE:.0f}, i.e. fair price at a {FAIR_PE_MULTIPLE:.0f}× P/E on 2-year-forward earnings.
+- **Fwd P/E (+1y)** – Yahoo forward P/E (`forwardPE`), based on analysts' next-year EPS.
+- **Fwd P/E (+2y)** – approximate P/E on +2y EPS,
+  assuming earnings grow by `earningsGrowth` (or {DEFAULT_GROWTH:.0%} if missing).  
+  Mathematically: `Fwd P/E (+1y) / (1 + growth)`.
+- **Fair Val (+2y)** – EPS(+2y) × {FAIR_PE_MULTIPLE:.0f}, where EPS(+2y) is inferred from
+  price and forward P/E.
 - **Discount %** – (Fair – Price) / Fair × 100:
     - Positive = price below fair (potential value).
     - Negative = price above fair (over fair).
