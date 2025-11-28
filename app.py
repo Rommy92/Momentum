@@ -366,18 +366,19 @@ def render_card(label, ticker_display, status_tuple, market_state: str):
     else:
         txt_color = "#e5e5e5"
 
-    # Market open/closed badge (no more N/A)
-    if market_state == "Open":
-        state_html = "<span style='color:#22c55e;'>· Open</span>"
+    # Only show a red "· Closed". When open, show nothing extra.
+    if market_state == "Closed":
+        state_html = "<span style='color:#ef4444;'> · Closed</span>"
     else:
-        state_html = "<span style='color:#9ca3af;'>· Closed</span>"
+        state_html = ""
 
     html = (
         f"<div style='border:1px solid #1f2933; padding:0.5rem; "
         f"border-radius:0.75rem; background-color:#050505;'>"
         f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
         f"<div style='font-weight:600; color:{txt_color};'>"
-        f"{ticker_display} {arrow} ({chg_pct:+.2f}%) {state_html}"
+        f"{ticker_display} {arrow} ({chg_pct:+.2f}%)"
+        f"{state_html}"
         f"</div>"
         f"</div>"
     )
