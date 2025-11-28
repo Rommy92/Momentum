@@ -5,8 +5,8 @@ import datetime as dt
 from ta.momentum import RSIIndicator
 
 # -------------- CONSTANTS ------------------
-FAIR_PE_MULTIPLE = 20  # Fair P/E on +2y EPS for Fair Val (+2y)
-DEFAULT_GROWTH = 0.15  # 15% EPS growth fallback for +2y approximation
+FAIR_PE_MULTIPLE = 20   # Fair P/E on +2y EPS for Fair Val (+2y)
+DEFAULT_GROWTH = 0.15   # 15% EPS growth fallback for +2y approximation
 
 
 # -------------- PAGE CONFIG ------------------
@@ -43,7 +43,6 @@ st.markdown(
 
 
 # -------------- VALUE / MOMENTUM LOGIC ------------------
-
 
 def get_value_momentum_signal(
     rsi,
@@ -120,7 +119,6 @@ def calculate_fair_value_from_eps2(price, eps_plus2, multiple=FAIR_PE_MULTIPLE):
 
 
 # -------------- REALTIME TICKER STATUS ------------------
-
 
 @st.cache_data(ttl=60)
 def get_ticker_status(symbol: str):
@@ -653,6 +651,8 @@ def build_column_config(columns):
     return cfg
 
 
+# -------------- CORE STOCK SUMMARY ------------------
+
 @st.cache_data(ttl=60)
 def get_stock_summary(tickers):
     rows = []
@@ -707,37 +707,55 @@ def get_stock_summary(tickers):
             except Exception:
                 market_cap = None
 
-            # ---------- FORWARD VALUATION: forwardPE + earningsGrowth ----------
+            # ---------- FORWARD P/E (+1y) & EPS APPROX (+2y) ----------
+            eps_plus1 = None
+            eps_plus2 = None
             fpe_1y = None
             fpe_2y = None
-            eps_plus2 = None
 
-            fpe_raw = info.get("forwardPE", None)
+            # 1) Prefer Yahoo's own forwardPE (this matches the website)
+            forward_pe_raw = info.get("forwardPE", None)
             try:
-                if fpe_raw is not None:
-                    fpe_1y = float(fpe_raw)
+                forward_pe = float(forward_pe_raw) if forward_pe_raw is not None else None
             except Exception:
-                fpe_1y = None
+                forward_pe = None
 
-            growth = info.get("earningsGrowth", None)
-            try:
-                if growth is not None:
-                    growth = float(growth)
-                else:
+            if forward_pe is not None and forward_pe > 0 and price is not None:
+                fpe_1y = round(forward_pe, 2)
+                eps_plus1 = price / forward_pe
+            else:
+                # 2) Fallback to forwardEps if forwardPE missing
+                forward_eps_raw = info.get("forwardEps", None)
+                try:
+                    forward_eps = float(forward_eps_raw) if forward_eps_raw is not None else None
+                except Exception:
+                    forward_eps = None
+
+                if forward_eps is not None and forward_eps > 0 and price is not None:
+                    eps_plus1 = forward_eps
+                    try:
+                        fpe_1y = round(price / forward_eps, 2)
+                    except ZeroDivisionError:
+                        fpe_1y = None
+
+            # 3) Build +2y EPS from +1y EPS and earningsGrowth (or 15% default)
+            if eps_plus1 is not None and eps_plus1 > 0:
+                growth_raw = info.get("earningsGrowth", None)
+                try:
+                    growth = float(growth_raw) if growth_raw is not None else DEFAULT_GROWTH
+                except Exception:
                     growth = DEFAULT_GROWTH
-            except Exception:
-                growth = DEFAULT_GROWTH
 
-            # clip growth to avoid insane outliers
-            growth = max(-0.5, min(1.0, growth))
+                # clip growth
+                growth = max(-0.5, min(1.0, growth))
 
-            eps_plus1 = None
-            if fpe_1y is not None and fpe_1y > 0 and price is not None:
-                eps_plus1 = price / fpe_1y
                 eps_plus2 = eps_plus1 * (1.0 + growth)
-                if eps_plus2 > 0:
-                    fpe_2y = round(price / eps_plus2, 2)
-                fpe_1y = round(fpe_1y, 2)
+
+                if eps_plus2 > 0 and price is not None:
+                    try:
+                        fpe_2y = round(price / eps_plus2, 2)
+                    except ZeroDivisionError:
+                        fpe_2y = None
 
             # Fair value based on +2y EPS
             fair_val_2y, discount_pct = calculate_fair_value_from_eps2(
@@ -804,7 +822,7 @@ if not df.empty:
     # Combined Price & 1D column
     df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
 
-    # We still need Price and %1D later, but not in this visible table.
+    # View table: hide raw Price and %1D (kept in df for later logic)
     df_display_for_view = df_display.drop(columns=["Price", "% 1D"])
 
     desired_order = [
@@ -898,7 +916,6 @@ if not df_ndx.empty:
     df_ndx_display = df_ndx.drop(columns=["Market Cap"], errors="ignore")
 
     df_ndx_display["Price & 1D"] = df_ndx_display.apply(format_price_1d, axis=1)
-
     df_ndx_for_view = df_ndx_display.drop(columns=["Price", "% 1D"])
 
     desired_order_ndx = [
@@ -1073,12 +1090,10 @@ st.markdown(
     f"""
 ### 🧠 Signal Logic & Fair Value
 
-- **Fwd P/E (+1y)** – Yahoo forward P/E (`forwardPE`), based on analysts' next-year EPS.
-- **Fwd P/E (+2y)** – approximate P/E on +2y EPS,
-  assuming earnings grow by `earningsGrowth` (or {DEFAULT_GROWTH:.0%} if missing).  
-  Mathematically: `Fwd P/E (+1y) / (1 + growth)`.
-- **Fair Val (+2y)** – EPS(+2y) × {FAIR_PE_MULTIPLE:.0f}, where EPS(+2y) is inferred from
-  price and forward P/E.
+- **Fwd P/E (+1y)** – Yahoo's `forwardPE` (matches the Forward P/E on the website).
+- **Fwd P/E (+2y)** – price divided by an approximate +2y EPS
+  (we take EPS(+1y) and grow it once by `earningsGrowth`, or {DEFAULT_GROWTH:.0%} if missing).
+- **Fair Val (+2y)** – EPS(+2y) × {FAIR_PE_MULTIPLE:.0f}, i.e. fair price at a {FAIR_PE_MULTIPLE:.0f}× P/E on 2-year-forward earnings.
 - **Discount %** – (Fair – Price) / Fair × 100:
     - Positive = price below fair (potential value).
     - Negative = price above fair (over fair).
