@@ -43,15 +43,57 @@ st.markdown(
 @st.cache_data(ttl=60)
 def get_ticker_status(symbol: str):
     """
-    Realtime-like status using:
-      - prev_close from 2-day daily bars (yesterday's close)
-      - latest price from 1m intraday with pre/post
+    Realtime-like status.
+
+    Priority 1: use Yahoo 'regularMarket*' fields from get_info()
+                (this matches what Yahoo shows on the website and
+                 works well for futures/indices/ETFs).
+    Priority 2: fall back to 2-day daily history + 1m intraday.
+
     Returns (mode, price, change, change_pct, arrow).
     """
+    # --------- PATH 1: regularMarket* from get_info() ----------
+    try:
+        t = yf.Ticker(symbol)
+        info = t.get_info() or {}
+
+        price = info.get("regularMarketPrice", None)
+        change = info.get("regularMarketChange", None)
+        change_pct = info.get("regularMarketChangePercent", None)
+
+        if price is not None and change_pct is not None:
+            price = float(price)
+            change_pct = float(change_pct)
+
+            if change is not None:
+                change = float(change)
+            else:
+                # Derive change if only percent is given
+                try:
+                    prev_close = price / (1 + change_pct / 100.0)
+                    change = price - prev_close
+                except Exception:
+                    change = 0.0
+
+            if change > 0:
+                mode = "green"
+                arrow = "▲"
+            elif change < 0:
+                mode = "red"
+                arrow = "▼"
+            else:
+                mode = "neutral"
+                arrow = "▶"
+
+            return mode, price, change, change_pct, arrow
+    except Exception:
+        # fall through to path 2
+        pass
+
+    # --------- PATH 2: 2d daily + 1m intraday ----------
     try:
         t = yf.Ticker(symbol)
 
-        # Previous close from 2-day history
         daily = t.history(period="2d")
         closes = daily.get("Close", pd.Series(dtype=float)).dropna()
         if len(closes) == 0:
@@ -62,7 +104,6 @@ def get_ticker_status(symbol: str):
         else:
             prev_close = float(closes.iloc[-1])
 
-        # Latest price including pre/post
         intra = t.history(period="1d", interval="1m", prepost=True)
         intra_closes = intra.get("Close", pd.Series(dtype=float)).dropna()
         if len(intra_closes) > 0:
@@ -261,7 +302,6 @@ with st.sidebar:
 
 st.title("Global Tech & Macro Dashboard")
 
-# We no longer show a big QQQ/QQQ Futures line here; market card handles it.
 st.caption(
     f"<p style='text-align:center;'>Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
     unsafe_allow_html=True,
@@ -270,7 +310,6 @@ st.caption(
 
 # -------------- MACRO / SECTOR / GLOBAL STRIPS ------------------
 
-# US macro & sector layer (including MARKET card)
 US_MACRO_ETFS = [
     ("MARKET", "Market (QQQ / QQQ Futures)"),  # synthetic
     ("ARKK", "Disruptive Growth"),
@@ -283,7 +322,6 @@ US_MACRO_ETFS = [
     ("GLD", "Gold"),
 ]
 
-# Global indices (real home indices)
 GLOBAL_INDICES = [
     ("^SSEC", "China (Shanghai)"),
     ("^KS11", "Korea (KOSPI)"),
@@ -353,7 +391,6 @@ for i in range(0, len(US_MACRO_ETFS), cards_per_row):
     for (ticker, label), col in zip(row, cols):
         with col:
             if ticker == "MARKET":
-                # Display underlying symbol/label instead of 'MARKET'
                 display_ticker = active_label  # 'QQQ' or 'QQQ Futures'
                 display_label = "Market (QQQ / QQQ Futures)"
             else:
@@ -675,7 +712,6 @@ with st.spinner("📡 Fetching data for Tech leadership table..."):
 if not df.empty:
     df = df.set_index("Ticker")
 
-    # Sort by invisible Market Cap (desc)
     if "Market Cap" in df.columns:
         df_sorted = df.sort_values("Market Cap", ascending=False)
     else:
