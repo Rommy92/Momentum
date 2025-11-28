@@ -6,7 +6,29 @@ from ta.momentum import RSIIndicator
 
 # -------------- PAGE CONFIG ------------------
 st.set_page_config(
+    page_title="Global Tech & Macro Dashboard",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
+# Small hint to show sidebar exists
+st.markdown(
+    """
+    <style>
+    .sidebar-hint {
+        position: fixed;
+        top: 0.5rem;
+        left: 0.5rem;
+        z-index: 999;
+        background: rgba(15,23,42,0.9);
+        padding: 0.25rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        color: #a5f3fc;
+        border: 1px solid #22c55e55;
+    }
+    @media (max-width: 768px) {
+        .sidebar-hint { display: none; }
     }
     </style>
     <div class="sidebar-hint">🟢 Open filters in sidebar ⟵</div>
@@ -915,6 +937,7 @@ else:
         "No tickers currently match your buy-zone criteria. "
         "Loosen filters in the sidebar to widen the search."
     )
+
 
 # -------------- HOW TO READ THE SIGNALS ------------------
 
