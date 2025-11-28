@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Small hint to show sidebar exist
+# Small hint to show sidebar exists
 st.markdown(
     """
     <style>
