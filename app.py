@@ -704,7 +704,7 @@ def pct1d_style(val):
     return "color: #e5e5e5; font-weight: 600;"
 
 
-# -------------- TABLE 1: TECH LEADERSHIP ------------------
+# -------------- TABLE 1: TECH LEADERSHIPPpppppppppppppp ------------------
 
 df = pd.DataFrame()
 df_ndx = pd.DataFrame()
@@ -787,7 +787,7 @@ else:
 
 st.markdown("---")
 st.markdown(
-    "<h2>NASDAQ-100 DEEP DRAWDOWN RADAR</h2>",
+    "<h2>NASDAQ 100 DEEP DRAWDOWN RADAR</h2>",
     unsafe_allow_html=True,
 )
 
