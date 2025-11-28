@@ -996,8 +996,3 @@ st.markdown(
 """
 )
 
-# Force a rerun every 15 seconds to keep the prices fresh
-# Note: This will use up the st.cache_data TTL more quickly, so ensure it matches (e.g., 15s)
-st.rerun() 
-# OR use a placeholder and time.sleep for a more controlled approach, 
-# but st.rerun() is simpler in modern Streamlit.
