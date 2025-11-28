@@ -708,47 +708,51 @@ def get_stock_summary(tickers):
                 market_cap = None
 
             # ---------- FORWARD P/E (+1y) & EPS APPROX (+2y) ----------
+         # ---------- FORWARD P/E (+1y) & EPS APPROX (+2y) ----------
             eps_plus1 = None
             eps_plus2 = None
             fpe_1y = None
             fpe_2y = None
-
-            # 1) Prefer Yahoo's own forwardPE (this matches the website)
-            forward_pe_raw = info.get("forwardPE", None)
+            
+            # Use YF's next 12 month (NTM) EPS estimate for +1y
+            # This is often 'next' or 'future' EPS consensus
+            forward_eps_raw = info.get("forwardEps", None) 
             try:
-                forward_pe = float(forward_pe_raw) if forward_pe_raw is not None else None
+                eps_plus1 = float(forward_eps_raw) if forward_eps_raw is not None else None
             except Exception:
-                forward_pe = None
+                eps_plus1 = None
 
-            if forward_pe is not None and forward_pe > 0 and price is not None:
-                fpe_1y = round(forward_pe, 2)
-                eps_plus1 = price / forward_pe
-            else:
-                # 2) Fallback to forwardEps if forwardPE missing
-                forward_eps_raw = info.get("forwardEps", None)
+            if eps_plus1 is not None and eps_plus1 > 0 and price is not None:
                 try:
-                    forward_eps = float(forward_eps_raw) if forward_eps_raw is not None else None
-                except Exception:
-                    forward_eps = None
+                    fpe_1y = round(price / eps_plus1, 2)
+                except ZeroDivisionError:
+                    fpe_1y = None
+                
+                # Try to use next two fiscal years' estimate difference for growth
+                # This is an attempt to use a more specific growth rate
+                growth_rate = info.get("currentYearProjectedGrowthRate", None) # Alternative field to test
 
-                if forward_eps is not None and forward_eps > 0 and price is not None:
-                    eps_plus1 = forward_eps
-                    try:
-                        fpe_1y = round(price / forward_eps, 2)
-                    except ZeroDivisionError:
-                        fpe_1y = None
+                if growth_rate is None or growth_rate == 0.0:
+                    growth_rate = info.get("earningsGrowth", None)
 
-            # 3) Build +2y EPS from +1y EPS and earningsGrowth (or 15% default)
-            if eps_plus1 is not None and eps_plus1 > 0:
-                growth_raw = info.get("earningsGrowth", None)
                 try:
-                    growth = float(growth_raw) if growth_raw is not None else DEFAULT_GROWTH
+                    growth = float(growth_rate) if growth_rate is not None else DEFAULT_GROWTH
                 except Exception:
                     growth = DEFAULT_GROWTH
 
+                # Use a specific 2-year growth projection if available
+                if 'twoYearEarningsGrowth' in info:
+                    try:
+                        two_year_growth = float(info['twoYearEarningsGrowth'])
+                        # Approximating 1-year from 2-year
+                        growth = (1.0 + two_year_growth)**0.5 - 1.0 # crude approximation
+                    except Exception:
+                        pass
+
+
+                # 3) Build +2y EPS from +1y EPS and growth (or 15% default)
                 # clip growth
                 growth = max(-0.5, min(1.0, growth))
-
                 eps_plus2 = eps_plus1 * (1.0 + growth)
 
                 if eps_plus2 > 0 and price is not None:
