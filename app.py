@@ -3,11 +3,10 @@ import yfinance as yf
 import pandas as pd
 import datetime as dt
 from ta.momentum import RSIIndicator
-import requests
 
 # -------------- PAGE CONFIG ------------------
 st.set_page_config(
-    page_title="Tech Leadership Monitor",
+    page_title="Global Tech & Macro Dashboard",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -90,7 +89,7 @@ def get_ticker_status(symbol: str):
 @st.cache_data(ttl=300)
 def get_market_state(symbol: str):
     """
-    Try to determine if a market is Open/Closed based on Yahoo's marketState.
+    Determine if a market is Open/Closed based on Yahoo's marketState when available.
     Returns 'Open', 'Closed', or None.
     """
     try:
@@ -105,43 +104,6 @@ def get_market_state(symbol: str):
     if state == "CLOSED":
         return "Closed"
     return None
-
-
-@st.cache_data(ttl=600)
-def get_fear_greed_index():
-    """
-    Fetch CNN-style Fear & Greed index.
-    If the endpoint fails or changes, return None and the app will just
-    show 'data unavailable'.
-    """
-    try:
-        url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
-        resp = requests.get(url, timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
-        # latest is last in 'fear_and_greed_historical'
-        hist = data.get("fear_and_greed_historical", [])
-        if not hist:
-            return None
-        latest = hist[-1]
-        value = int(latest.get("value"))
-        return value
-    except Exception:
-        return None
-
-
-def classify_fear_greed(value: int) -> str:
-    if value is None:
-        return "Unavailable"
-    if value < 25:
-        return "Extreme Fear"
-    if value < 45:
-        return "Fear"
-    if value < 55:
-        return "Neutral"
-    if value < 75:
-        return "Greed"
-    return "Extreme Greed"
 
 
 def is_regular_trading_hours():
@@ -210,10 +172,12 @@ h1, h2 {{
     color: {accent} !important;
     text-shadow: 0 0 4px {accent}, 0 0 10px {accent};
     animation: neonPulse 3s ease-in-out infinite;
+    text-align: center;
 }}
 
 h3, h4 {{
     color: {accent} !important;
+    text-align: center;
 }}
 
 @keyframes neonPulse {{
@@ -292,7 +256,7 @@ with st.sidebar:
 
 # -------------- TITLE + HEADER ------------------
 
-st.title("Tech Leadership Monitor")
+st.title("Global Tech & Macro Dashboard")
 
 if active_price is not None and active_change_pct is not None:
     st.subheader(
@@ -301,14 +265,17 @@ if active_price is not None and active_change_pct is not None:
 else:
     st.subheader(f"{active_label} data unavailable — default neutral theme")
 
-st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.caption(
+    f"<p style='text-align:center;'>Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
+    unsafe_allow_html=True,
+)
 
 
 # -------------- MACRO / SECTOR / GLOBAL STRIPS ------------------
 
 # US macro & sector layer (including MARKET card)
 US_MACRO_ETFS = [
-    ("MARKET", "Market"),         # synthetic, uses active_* values
+    ("MARKET", "Market (QQQ / QQQ Futures)"),  # synthetic
     ("ARKK", "Disruptive Growth"),
     ("MEME", "Meme Beta"),
     ("SMH", "Semiconductors"),
@@ -344,14 +311,14 @@ market_state_map["MARKET"] = get_market_state(active_symbol)
 st.markdown("### US Macro & Sector Pulse")
 
 
-def render_card(label, ticker, status_tuple, market_state: str):
+def render_card(label, ticker_display, status_tuple, market_state: str):
     mode, price, _, chg_pct, arrow = status_tuple
     if price is None or chg_pct is None:
         html = (
             f"<div style='border:1px solid #1f2933; padding:0.5rem; "
             f"border-radius:0.75rem; background-color:#050505;'>"
             f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
-            f"<div style='font-weight:600; color:#9ca3af;'>{ticker} data unavailable</div>"
+            f"<div style='font-weight:600; color:#9ca3af;'>{ticker_display} data unavailable</div>"
             f"</div>"
         )
         return html
@@ -377,7 +344,7 @@ def render_card(label, ticker, status_tuple, market_state: str):
         f"border-radius:0.75rem; background-color:#050505;'>"
         f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
         f"<div style='font-weight:600; color:{txt_color};'>"
-        f"{ticker} {arrow} {price:.2f} ({chg_pct:+.2f}%) {state_html}"
+        f"{ticker_display} {arrow} {price:.2f} ({chg_pct:+.2f}%) {state_html}"
         f"</div>"
         f"</div>"
     )
@@ -390,8 +357,16 @@ for i in range(0, len(US_MACRO_ETFS), cards_per_row):
     cols = st.columns(len(row))
     for (ticker, label), col in zip(row, cols):
         with col:
+            if ticker == "MARKET":
+                # Display underlying symbol/label instead of 'MARKET'
+                display_ticker = active_label  # 'QQQ' or 'QQQ Futures'
+                display_label = "Market (QQQ / QQQ Futures)"
+            else:
+                display_ticker = ticker
+                display_label = label
+
             st.markdown(
-                render_card(label, ticker, status_map[ticker], market_state_map[ticker]),
+                render_card(display_label, display_ticker, status_map[ticker], market_state_map[ticker]),
                 unsafe_allow_html=True,
             )
 
@@ -406,39 +381,6 @@ for i in range(0, len(GLOBAL_INDICES), cards_per_row):
                 render_card(label, ticker, status_map[ticker], market_state_map[ticker]),
                 unsafe_allow_html=True,
             )
-
-# Fear & Greed card
-st.markdown("### Sentiment Gauge")
-fg_value = get_fear_greed_index()
-fg_label = classify_fear_greed(fg_value)
-
-if fg_value is not None:
-    if fg_value < 25:
-        fg_color = "#ef4444"
-    elif fg_value < 45:
-        fg_color = "#f97316"
-    elif fg_value < 55:
-        fg_color = "#e5e5e5"
-    elif fg_value < 75:
-        fg_color = "#22c55e"
-    else:
-        fg_color = "#16a34a"
-    fg_text = f"{fg_value} – {fg_label}"
-else:
-    fg_color = "#9ca3af"
-    fg_text = "Data unavailable"
-
-st.markdown(
-    f"""
-    <div style='border:1px solid #1f2933; padding:0.75rem; border-radius:0.75rem;
-                background-color:#050505; max-width:320px;'>
-        <div style='font-size:0.8rem; color:#9ca3af;'>CNN Fear & Greed (Equities)</div>
-        <div style='font-weight:700; font-size:1.1rem; color:{fg_color};'>{fg_text}</div>
-        <div style='font-size:0.75rem; color:#9ca3af;'>Higher = Greed, Lower = Fear.</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
 
 
 # -------------- TICKER UNIVERSES ------------------
@@ -808,8 +750,7 @@ else:
 
 st.markdown("---")
 st.markdown(
-    "<h2 style='text-align:left; text-shadow:0 0 8px #76B900;'>"
-    "NASDAQ-100 DEEP DRAWDOWN RADAR</h2>",
+    "<h2>NASDAQ-100 DEEP DRAWDOWN RADAR</h2>",
     unsafe_allow_html=True,
 )
 
@@ -955,7 +896,10 @@ if not candidates.empty:
         height=400,
     )
 else:
-    st.write("No tickers currently match your buy-zone criteria. Loosen filters in the sidebar to widen the search.")
+    st.write(
+        "No tickers currently match your buy-zone criteria. "
+        "Loosen filters in the sidebar to widen the search."
+    )
 
 
 # -------------- HOW TO READ THE SIGNALS ------------------
