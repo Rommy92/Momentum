@@ -36,77 +36,57 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 # -------------- REALTIME TICKER STATUS ------------------
 
 
 @st.cache_data(ttl=60)
 def get_ticker_status(symbol: str):
     """
-    Realtime-like status for a ticker.
+    Realtime-like status.
 
-    - If marketState == PRE  -> use preMarketPrice vs regularMarketPreviousClose
-    - If marketState == POST -> use postMarketPrice vs regularMarketPreviousClose
-    - Else                   -> use regularMarketPrice vs regularMarketPreviousClose
-    - If that fails, fall back to 2d history + 1m intraday.
+    Priority 1: use Yahoo 'regularMarket*' fields from get_info()
+    Priority 2: fall back to 2-day daily history + 1m intraday.
 
     Returns (mode, price, change, change_pct, arrow).
     """
-    # ---------- PATH 1: info() with pre/post/regular ----------
+    # --------- PATH 1: regularMarket* from get_info() ----------
     try:
         t = yf.Ticker(symbol)
         info = t.get_info() or {}
-    except Exception:
-        info = {}
 
-    def build_from_info(price_key: str):
-        """Helper: compute price/change/% from chosen price key."""
-        price = info.get(price_key, None)
-        prev_close = info.get("regularMarketPreviousClose", None)
-        if price is None or prev_close is None:
-            return None
-        try:
+        price = info.get("regularMarketPrice", None)
+        change = info.get("regularMarketChange", None)
+        change_pct = info.get("regularMarketChangePercent", None)
+
+        if price is not None and change_pct is not None:
             price = float(price)
-            prev_close = float(prev_close)
-        except Exception:
-            return None
-        if prev_close == 0:
-            return None
+            change_pct = float(change_pct)
 
-        change = price - prev_close
-        change_pct = (change / prev_close) * 100.0
+            if change is not None:
+                change = float(change)
+            else:
+                try:
+                    prev_close = price / (1 + change_pct / 100.0)
+                    change = price - prev_close
+                except Exception:
+                    change = 0.0
 
-        if change > 0:
-            mode = "green"
-            arrow = "▲"
-        elif change < 0:
-            mode = "red"
-            arrow = "▼"
-        else:
-            mode = "neutral"
-            arrow = "▶"
+            if change > 0:
+                mode = "green"
+                arrow = "▲"
+            elif change < 0:
+                mode = "red"
+                arrow = "▼"
+            else:
+                mode = "neutral"
+                arrow = "▶"
 
-        return mode, price, change, change_pct, arrow
+            return mode, price, change, change_pct, arrow
+    except Exception:
+        pass
 
-    state = str(info.get("marketState", "")).upper()
-
-    # Use pre-market price when in PRE
-    if state == "PRE":
-        res = build_from_info("preMarketPrice")
-        if res is not None:
-            return res
-
-    # Use post-market price when in POST
-    if state == "POST":
-        res = build_from_info("postMarketPrice")
-        if res is not None:
-            return res
-
-    # Default: regular session price
-    res = build_from_info("regularMarketPrice")
-    if res is not None:
-        return res
-
-    # ---------- PATH 2: fallback (2d daily + 1m intraday) ----------
+    # --------- PATH 2: 2d daily + 1m intraday ----------
     try:
         t = yf.Ticker(symbol)
 
@@ -128,7 +108,7 @@ def get_ticker_status(symbol: str):
             price = prev_close
 
         change = price - prev_close
-        change_pct = (change / prev_close) * 100.0 if prev_close != 0 else 0.0
+        change_pct = (change / prev_close) * 100 if prev_close != 0 else 0.0
 
         if change > 0:
             mode = "green"
@@ -198,6 +178,7 @@ else:
     active_change_pct = fut_change_pct
     active_arrow = fut_arrow
 
+
 # Accent color based on ACTIVE driver
 if active_mode == "green":
     accent = "#76B900"
@@ -205,6 +186,7 @@ elif active_mode == "red":
     accent = "#ef4444"
 else:
     accent = "#0ea5e9"
+
 
 # -------------- CYBERPUNK CSS ------------------
 
@@ -276,6 +258,7 @@ h3, h4 {{
 """
 st.markdown(cyberpunk_css, unsafe_allow_html=True)
 
+
 # -------------- SIDEBAR: BUY-ZONE FILTER CONTROLS ------------------
 
 with st.sidebar:
@@ -308,6 +291,7 @@ with st.sidebar:
         index=0,
     )
 
+
 # -------------- TITLE + HEADER ------------------
 
 st.title("Global Tech & Macro Dashboard")
@@ -315,6 +299,7 @@ st.caption(
     f"<p style='text-align:center;'>Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
     unsafe_allow_html=True,
 )
+
 
 # -------------- MACRO / SECTOR / GLOBAL STRIPS ------------------
 
@@ -356,6 +341,7 @@ if price_ssec is None:
 
 market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
 market_state_map["MARKET"] = get_market_state(active_symbol)
+
 
 st.markdown("### US Macro & Sector Pulse")
 
@@ -437,6 +423,7 @@ for i in range(0, len(GLOBAL_INDICES), cards_per_row):
                 render_card(label, ticker, status_map[ticker], market_state_map[ticker], True),
                 unsafe_allow_html=True,
             )
+
 
 # -------------- TICKER UNIVERSES ------------------
 
@@ -574,6 +561,7 @@ NASDAQ100_TICKERS = [
     "ZS",
 ]
 
+
 # -------------- HELPERS FOR TABLES ------------------
 
 
@@ -625,6 +613,7 @@ def rsi_zone_style(val):
     return "color: #ef4444; font-weight: 600;"
 
 
+# base colours for gradients
 RED = (239, 68, 68)
 BLACK = (0, 0, 0)
 GREEN = (34, 197, 94)
@@ -669,6 +658,7 @@ def color_bipolar(v, vmin, vmax):
 @st.cache_data(ttl=60)
 def get_stock_summary(tickers):
     rows = []
+
     for ticker in tickers:
         try:
             stock = yf.Ticker(ticker)
@@ -752,7 +742,10 @@ def get_stock_summary(tickers):
             rsi_zone_str = rsi_zone_text(rsi_val)
 
             value_signal = get_value_momentum_signal(
-                rsi=rsi_val, pct_from_high=pct_from_52wk, pct_1m=pct_1m, fpe=fpe
+                rsi=rsi_val,
+                pct_from_high=pct_from_52wk,
+                pct_1m=pct_1m,
+                fpe=fpe,
             )
 
             rows.append(
@@ -770,6 +763,7 @@ def get_stock_summary(tickers):
                     "Market Cap": market_cap,
                 }
             )
+
         except Exception:
             continue
 
@@ -779,7 +773,8 @@ def get_stock_summary(tickers):
 BASE_COLUMN_CONFIG = {
     col: st.column_config.Column(width="fit")
     for col in [
-        "Price",
+        "Price",        # still used in Buy-Zone section
+        "Price & 1D",   # new combined column for main tables
         "% 1D",
         "% 5D",
         "% 1M",
@@ -802,6 +797,7 @@ def build_column_config(columns):
     return cfg
 
 
+# styling for separate Price/%1D (used in Buy-Zone candidates)
 def price_style(row):
     val = row.get("% 1D", None)
     if pd.isna(val):
@@ -821,6 +817,39 @@ def pct1d_style(val):
     if val < 0:
         return "color: #ef4444; font-weight: 600;"
     return "color: #e5e5e5; font-weight: 600;"
+
+
+# NEW: style for combined "Price & 1D" column
+def price_1d_style(val):
+    """
+    Style for 'Price & 1D' column:
+    - green if 1D % > 0
+    - red if 1D % < 0
+    - grey otherwise
+    """
+    if val is None or val == "–":
+        return ""
+    try:
+        # "$180.62 (+1.4%)"
+        inside = val.split("(")[1].split("%")[0]
+        pct = float(inside)
+    except Exception:
+        return ""
+    if pct > 0:
+        return "color: #22c55e; font-weight: 600;"
+    if pct < 0:
+        return "color: #ef4444; font-weight: 600;"
+    return "color: #e5e5e5; font-weight: 600;"
+
+
+def format_price_1d(row):
+    price = row["Price"]
+    pct_1d = row["% 1D"]
+    if pd.isna(price) and pd.isna(pct_1d):
+        return "–"
+    if pd.isna(pct_1d):
+        return f"${price:,.2f}"
+    return f"${price:,.2f} ({pct_1d:+.1f}%)"
 
 
 # -------------- TABLE 1: TECH LEADERSHIP ------------------
@@ -844,9 +873,12 @@ if not df.empty:
 
     df_display = df_sorted.drop(columns=["Market Cap"], errors="ignore")
 
+    # --- NEW: combined column ---
+    df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
+    df_display = df_display.drop(columns=["Price", "% 1D"])
+
     format_dict = {
-        "Price": "${:,.2f}",
-        "% 1D": "{:.1f}%",
+        "Price & 1D": "{}",
         "% 5D": "{:.1f}%",
         "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
@@ -887,8 +919,7 @@ if not df.empty:
     )
 
     styled = styled.applymap(rsi_zone_style, subset=["RSI Zone"])
-    styled = styled.apply(lambda row: price_style(row), subset=["Price"], axis=1)
-    styled = styled.applymap(pct1d_style, subset=["% 1D"])
+    styled = styled.applymap(price_1d_style, subset=["Price & 1D"])
 
     column_config = build_column_config(df_display.columns)
 
@@ -901,11 +932,12 @@ if not df.empty:
 else:
     st.write("No data loaded.")
 
+
 # -------------- TABLE 2: NASDAQ-100 DEEP DRAWDOWN ------------------
 
 st.markdown("---")
 st.markdown(
-    "<h2>NASDAQ-100 DEEP DRAWDOWN RADAR</h2>",
+    "<h2>NASDAQ 100 DEEP DRAWDOWN RADAR</h2>",
     unsafe_allow_html=True,
 )
 
@@ -917,9 +949,12 @@ if not df_ndx.empty:
     df_ndx = df_ndx.sort_values("% from 52w High")
     df_ndx_display = df_ndx.drop(columns=["Market Cap"], errors="ignore")
 
+    # --- NEW: combined column for Nasdaq table ---
+    df_ndx_display["Price & 1D"] = df_ndx_display.apply(format_price_1d, axis=1)
+    df_ndx_display = df_ndx_display.drop(columns=["Price", "% 1D"])
+
     ndx_format_dict = {
-        "Price": "${:,.2f}",
-        "% 1D": "{:.1f}%",
+        "Price & 1D": "{}",
         "% 5D": "{:.1f}%",
         "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
@@ -960,8 +995,7 @@ if not df_ndx.empty:
     )
 
     styled_ndx = styled_ndx.applymap(rsi_zone_style, subset=["RSI Zone"])
-    styled_ndx = styled_ndx.apply(lambda row: price_style(row), subset=["Price"], axis=1)
-    styled_ndx = styled_ndx.applymap(pct1d_style, subset=["% 1D"])
+    styled_ndx = styled_ndx.applymap(price_1d_style, subset=["Price & 1D"])
 
     ndx_column_config = build_column_config(df_ndx_display.columns)
 
@@ -973,6 +1007,7 @@ if not df_ndx.empty:
     )
 else:
     st.write("No Nasdaq-100 data loaded.")
+
 
 # -------------- BUY-ZONE CANDIDATES ------------------
 
@@ -1054,6 +1089,7 @@ else:
         "No tickers currently match your buy-zone criteria. "
         "Loosen filters in the sidebar to widen the search."
     )
+
 
 # -------------- HOW TO READ THE SIGNALS ------------------
 
