@@ -44,20 +44,23 @@ st.markdown(
 def get_ticker_status(symbol: str):
     """
     Realtime-like status using:
-      - prev_close from daily bars
+      - prev_close from 2-day daily bars (yesterday's close)
       - latest price from 1m intraday with pre/post
     Returns (mode, price, change, change_pct, arrow).
     """
     try:
         t = yf.Ticker(symbol)
 
-        # Previous close (last daily close)
-        daily = t.history(period="1d")
+        # Previous close from 2-day history
+        daily = t.history(period="2d")
         closes = daily.get("Close", pd.Series(dtype=float)).dropna()
         if len(closes) == 0:
             return "neutral", None, None, None, "▶"
 
-        prev_close = float(closes.iloc[-1])
+        if len(closes) >= 2:
+            prev_close = float(closes.iloc[-2])
+        else:
+            prev_close = float(closes.iloc[-1])
 
         # Latest price including pre/post
         intra = t.history(period="1d", interval="1m", prepost=True)
@@ -90,20 +93,20 @@ def get_ticker_status(symbol: str):
 def get_market_state(symbol: str):
     """
     Determine if a market is Open/Closed based on Yahoo's marketState when available.
-    Returns 'Open', 'Closed', or None.
+    If unknown, default to Closed (we only care about a clear visual).
     """
     try:
         t = yf.Ticker(symbol)
         info = t.get_info()
+        state = str(info.get("marketState", "")).upper()
     except Exception:
-        return None
+        state = ""
 
-    state = str(info.get("marketState", "")).upper()
     if state in ("REGULAR", "PRE", "POST"):
         return "Open"
     if state == "CLOSED":
         return "Closed"
-    return None
+    return "Closed"
 
 
 def is_regular_trading_hours():
@@ -258,13 +261,7 @@ with st.sidebar:
 
 st.title("Global Tech & Macro Dashboard")
 
-if active_price is not None and active_change_pct is not None:
-    st.subheader(
-        f"{active_label} {active_arrow} {active_price:.2f} ({active_change_pct:+.2f}%)"
-    )
-else:
-    st.subheader(f"{active_label} data unavailable — default neutral theme")
-
+# We no longer show a big QQQ/QQQ Futures line here; market card handles it.
 st.caption(
     f"<p style='text-align:center;'>Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
     unsafe_allow_html=True,
@@ -302,7 +299,7 @@ status_map = {sym: get_ticker_status(sym) for sym in real_symbols}
 # MARKET uses active_* already computed
 status_map["MARKET"] = (active_mode, active_price, None, active_change_pct, active_arrow)
 
-# Market state (Open/Closed) for all real symbols
+# Market state (Open/Closed) for all symbols
 market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
 # MARKET state derived from underlying symbol (QQQ or NQ=F)
 market_state_map["MARKET"] = get_market_state(active_symbol)
@@ -331,20 +328,18 @@ def render_card(label, ticker_display, status_tuple, market_state: str):
     else:
         txt_color = "#e5e5e5"
 
-    # Market open/closed badge
+    # Market open/closed badge (no more N/A)
     if market_state == "Open":
         state_html = "<span style='color:#22c55e;'>· Open</span>"
-    elif market_state == "Closed":
-        state_html = "<span style='color:#9ca3af;'>· Closed</span>"
     else:
-        state_html = "<span style='color:#9ca3af;'>· State N/A</span>"
+        state_html = "<span style='color:#9ca3af;'>· Closed</span>"
 
     html = (
         f"<div style='border:1px solid #1f2933; padding:0.5rem; "
         f"border-radius:0.75rem; background-color:#050505;'>"
         f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
         f"<div style='font-weight:600; color:{txt_color};'>"
-        f"{ticker_display} {arrow} {price:.2f} ({chg_pct:+.2f}%) {state_html}"
+        f"{ticker_display} {arrow} ({chg_pct:+.2f}%) {state_html}"
         f"</div>"
         f"</div>"
     )
@@ -674,7 +669,7 @@ df_ndx = pd.DataFrame()
 st.markdown("---")
 st.markdown("## Tech Leadership Table – Megacap & Core Names")
 
-with st.spinner("📡 Fetching data for Tech Leadership Monitor..."):
+with st.spinner("📡 Fetching data for Tech leadership table..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
 if not df.empty:
