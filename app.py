@@ -40,114 +40,39 @@ st.markdown(
 # -------------- REALTIME TICKER STATUS ------------------
 
 
-@st.cache_data(ttl=15)
+@st.cache_data(ttl=60)
 def get_ticker_status(symbol: str):
     """
-    Realtime-like status using intraday data (incl. pre/post).
+    Realtime-like status using intraday 1m data (incl. pre/post) vs previous
+    regular-session close.
 
-    Strategy:
-    - Previous close: 2-day daily history (last regular close).
-    - Current price: 1-minute intraday with prepost=True (includes pre/post).
-    - If either fails, fall back to Yahoo 'regularMarket*' / 'preMarket*' / 'postMarket*'.
+    Returns (mode, price, change, change_pct, arrow).
 
-    Returns: (mode, price, change, change_pct, arrow)
+    This is designed to match what Yahoo Finance shows as the live price:
+    - latest 1m candle with pre/post = True
+    - change vs previous daily close
     """
-    price = None
-    prev_close = None
-
-    # --- Try to get prev close from 2d daily history ---
-    try:
-        t = yf.Ticker(symbol)
-        daily = t.history(period="2d")
-        closes = daily.get("Close", pd.Series(dtype=float)).dropna()
-
-        if len(closes) >= 2:
-            # penultimate close = yesterday's regular close
-            prev_close = float(closes.iloc[-2])
-        elif len(closes) == 1:
-            prev_close = float(closes.iloc[-1])
-    except Exception:
-        prev_close = None
-
-    # --- Try to get latest price from 1m intraday (incl. pre/post) ---
-    try:
-        if "t" not in locals():
-            t = yf.Ticker(symbol)
-        intra = t.history(period="1d", interval="1m", prepost=True)
-        intra_closes = intra.get("Close", pd.Series(dtype=float)).dropna()
-        if len(intra_closes) > 0:
-            price = float(intra_closes.iloc[-1])
-    except Exception:
-        price = None
-
-    # --- Fallbacks via get_info() ---
-    try:
-        if "t" not in locals():
-            t = yf.Ticker(symbol)
-        info = t.get_info() or {}
-    except Exception:
-        info = {}
-
-    # Fallback for price
-    if price is None:
-        for key in ("preMarketPrice", "postMarketPrice", "regularMarketPrice"):
-            v = info.get(key, None)
-            if v is not None:
-                try:
-                    price = float(v)
-                    break
-                except Exception:
-                    continue
-
-    # Fallback for previous close
-    if prev_close is None:
-        for key in ("regularMarketPreviousClose", "previousClose", "regularMarketPrice"):
-            v = info.get(key, None)
-            if v is not None:
-                try:
-                    prev_close = float(v)
-                    break
-                except Exception:
-                    continue
-
-    # If still missing critical data, bail out
-    if price is None or prev_close is None or prev_close == 0:
-        return "neutral", price, None, None, "▶"
-
-    change = price - prev_close
-    change_pct = (change / prev_close) * 100
-
-    if change > 0:
-        mode = "green"
-        arrow = "▲"
-    elif change < 0:
-        mode = "red"
-        arrow = "▼"
-    else:
-        mode = "neutral"
-        arrow = "▶"
-
-    return mode, price, change, change_pct, arrow
-
-    # --------- PATH 2: 2d daily + 1m intraday ----------
     try:
         t = yf.Ticker(symbol)
 
-        daily = t.history(period="2d")
+        # ----- Previous regular-session close (for % change baseline) -----
+        daily = t.history(period="5d", interval="1d")
         closes = daily.get("Close", pd.Series(dtype=float)).dropna()
         if len(closes) == 0:
             return "neutral", None, None, None, "▶"
 
         if len(closes) >= 2:
-            prev_close = float(closes.iloc[-2])
+            prev_close = float(closes.iloc[-2])  # previous trading day close
         else:
             prev_close = float(closes.iloc[-1])
 
+        # ----- Latest price from intraday 1m candles incl. pre/post -----
         intra = t.history(period="1d", interval="1m", prepost=True)
         intra_closes = intra.get("Close", pd.Series(dtype=float)).dropna()
         if len(intra_closes) > 0:
             price = float(intra_closes.iloc[-1])
         else:
+            # fallback: previous close
             price = prev_close
 
         change = price - prev_close
@@ -346,7 +271,6 @@ st.caption(
 
 # -------------- MACRO / SECTOR / GLOBAL STRIPS ------------------
 
-# Removed Oil (USO) so we have 8 cards -> 2x4 grid
 US_MACRO_ETFS = [
     ("MARKET", "Market (QQQ / QQQ Futures)"),  # synthetic
     ("ARKK", "Disruptive Growth"),
@@ -358,7 +282,6 @@ US_MACRO_ETFS = [
     ("GLD", "Gold"),
 ]
 
-# Added Germany & France to make 8 indices -> 2x4 grid
 GLOBAL_INDICES = [
     ("^SSEC", "China (Shanghai)"),
     ("^KS11", "Korea (KOSPI)"),
@@ -376,7 +299,9 @@ status_map = {sym: get_ticker_status(sym) for sym in real_symbols}
 status_map["MARKET"] = (active_mode, active_price, None, active_change_pct, active_arrow)
 
 # China fallback
-mode_ssec, price_ssec, chg_ssec, chg_pct_ssec, arr_ssec = status_map.get("^SSEC", (None, None, None, None, None))
+mode_ssec, price_ssec, chg_ssec, chg_pct_ssec, arr_ssec = status_map.get(
+    "^SSEC", (None, None, None, None, None)
+)
 if price_ssec is None:
     fb = get_ticker_status("000001.SS")
     if fb[1] is not None:
@@ -435,12 +360,11 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
 
 cards_per_row = 4
 for i in range(0, len(US_MACRO_ETFS), cards_per_row):
-    row = US_MACRO_ETFS[i:i + cards_per_row]
+    row = US_MACRO_ETFS[i : i + cards_per_row]
     cols = st.columns(len(row))
     for (ticker, label), col in zip(row, cols):
         with col:
             if ticker == "MARKET":
-                # Main market card: NEVER show Closed/Open text
                 display_ticker = active_label
                 display_label = "Market (QQQ / QQQ Futures)"
                 state_for_card = market_state_map["MARKET"]
@@ -459,7 +383,7 @@ for i in range(0, len(US_MACRO_ETFS), cards_per_row):
 st.markdown("### Global Indices Pulse")
 
 for i in range(0, len(GLOBAL_INDICES), cards_per_row):
-    row = GLOBAL_INDICES[i:i + cards_per_row]
+    row = GLOBAL_INDICES[i : i + cards_per_row]
     cols = st.columns(len(row))
     for (ticker, label), col in zip(row, cols):
         with col:
@@ -472,27 +396,137 @@ for i in range(0, len(GLOBAL_INDICES), cards_per_row):
 # -------------- TICKER UNIVERSES ------------------
 
 TOP_TECH_TICKERS = [
-    "MSFT", "AMZN", "GOOG", "NVDA", "META",
-    "TSM", "AVGO", "ORCL", "CRM",
-    "AMD", "NOW", "MU", "SNOW", "PLTR",
-    "ANET", "CRWD", "PANW", "NET", "DDOG",
-    "MDB", "MRVL", "IBM", "AMKR", "SMCI",
-    "AXON", "ISRG",
+    "MSFT",
+    "AMZN",
+    "GOOG",
+    "NVDA",
+    "META",
+    "TSM",
+    "AVGO",
+    "ORCL",
+    "CRM",
+    "AMD",
+    "NOW",
+    "MU",
+    "SNOW",
+    "PLTR",
+    "ANET",
+    "CRWD",
+    "PANW",
+    "NET",
+    "DDOG",
+    "MDB",
+    "MRVL",
+    "IBM",
+    "AMKR",
+    "SMCI",
+    "AXON",
+    "ISRG",
 ]
 
 NASDAQ100_TICKERS = [
-    "ADBE", "AMD", "ABNB", "GOOGL", "GOOG", "AMZN", "AEP", "AMGN", "ADI",
-    "AAPL", "AMAT", "APP", "ARM", "ASML", "AZN", "TEAM", "ADSK", "ADP",
-    "AXON", "BKR", "BIIB", "BKNG", "AVGO", "CDNS", "CDW", "CHTR", "CTAS",
-    "CSCO", "CCEP", "CTSH", "CMCSA", "CEG", "CPRT", "CSGP", "COST", "CRWD",
-    "CSX", "DDOG", "DXCM", "FANG", "DASH", "EA", "EXC", "FAST", "FTNT",
-    "GEHC", "GILD", "GFS", "HON", "IDXX", "INTC", "INTU", "ISRG", "KDP",
-    "KLAC", "KHC", "LRCX", "LIN", "LULU", "MAR", "MRVL", "MELI", "META",
-    "MCHP", "MU", "MSFT", "MSTR", "MDLZ", "MNST", "NFLX", "NVDA", "NXPI",
-    "ORLY", "ODFL", "ON", "PCAR", "PLTR", "PANW", "PAYX", "PYPL", "PDD",
-    "PEP", "QCOM", "REGN", "ROP", "ROST", "SHOP", "SOLS", "SBUX", "SNPS",
-    "TMUS", "TTWO", "TSLA", "TXN", "TRI", "TTD", "VRSK", "VRTX", "WBD",
-    "WDAY", "XEL", "ZS",
+    "ADBE",
+    "AMD",
+    "ABNB",
+    "GOOGL",
+    "GOOG",
+    "AMZN",
+    "AEP",
+    "AMGN",
+    "ADI",
+    "AAPL",
+    "AMAT",
+    "APP",
+    "ARM",
+    "ASML",
+    "AZN",
+    "TEAM",
+    "ADSK",
+    "ADP",
+    "AXON",
+    "BKR",
+    "BIIB",
+    "BKNG",
+    "AVGO",
+    "CDNS",
+    "CDW",
+    "CHTR",
+    "CTAS",
+    "CSCO",
+    "CCEP",
+    "CTSH",
+    "CMCSA",
+    "CEG",
+    "CPRT",
+    "CSGP",
+    "COST",
+    "CRWD",
+    "CSX",
+    "DDOG",
+    "DXCM",
+    "FANG",
+    "DASH",
+    "EA",
+    "EXC",
+    "FAST",
+    "FTNT",
+    "GEHC",
+    "GILD",
+    "GFS",
+    "HON",
+    "IDXX",
+    "INTC",
+    "INTU",
+    "ISRG",
+    "KDP",
+    "KLAC",
+    "KHC",
+    "LRCX",
+    "LIN",
+    "LULU",
+    "MAR",
+    "MRVL",
+    "MELI",
+    "META",
+    "MCHP",
+    "MU",
+    "MSFT",
+    "MSTR",
+    "MDLZ",
+    "MNST",
+    "NFLX",
+    "NVDA",
+    "NXPI",
+    "ORLY",
+    "ODFL",
+    "ON",
+    "PCAR",
+    "PLTR",
+    "PANW",
+    "PAYX",
+    "PYPL",
+    "PDD",
+    "PEP",
+    "QCOM",
+    "REGN",
+    "ROP",
+    "ROST",
+    "SHOP",
+    "SOLS",
+    "SBUX",
+    "SNPS",
+    "TMUS",
+    "TTWO",
+    "TSLA",
+    "TXN",
+    "TRI",
+    "TTD",
+    "VRSK",
+    "VRTX",
+    "WBD",
+    "WDAY",
+    "XEL",
+    "ZS",
 ]
 
 
@@ -609,11 +643,13 @@ def get_stock_summary(tickers):
 
             pct_5d = (
                 round((price - float(close.iloc[-6])) / float(close.iloc[-6]) * 100, 2)
-                if len(close) >= 6 else None
+                if len(close) >= 6
+                else None
             )
             pct_1m = (
                 round((price - float(close.iloc[-22])) / float(close.iloc[-22]) * 100, 2)
-                if len(close) >= 22 else None
+                if len(close) >= 22
+                else None
             )
 
             high_52wk = float(close.max())
@@ -747,7 +783,7 @@ def pct1d_style(val):
     return "color: #e5e5e5; font-weight: 600;"
 
 
-# -------------- TABLE 1: TECH LEADERSHIPPpppppppppppppp ------------------
+# -------------- TABLE 1: TECH LEADERSHIP ------------------
 
 df = pd.DataFrame()
 df_ndx = pd.DataFrame()
@@ -995,4 +1031,3 @@ st.markdown(
 - ⚪ **Neutral** – No strong edge from value or momentum.
 """
 )
-
