@@ -707,7 +707,7 @@ df = pd.DataFrame()
 df_ndx = pd.DataFrame()
 
 st.markdown("---")
-st.markdown("## Tech Leadership Table – Megacap & Core Names")
+st.markdown("## Tech Leadership")
 
 with st.spinner("📡 Fetching data for Tech leadership table..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
