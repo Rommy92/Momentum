@@ -4,6 +4,10 @@ import pandas as pd
 import datetime as dt
 from ta.momentum import RSIIndicator
 
+# -------------- CONSTANTS ------------------
+FAIR_PE_MULTIPLE = 20  # Fair P/E on +2y EPS for Fair Val (+2y)
+
+
 # -------------- PAGE CONFIG ------------------
 st.set_page_config(
     page_title="Global Tech & Macro Dashboard",
@@ -37,17 +41,105 @@ st.markdown(
 )
 
 
+# -------------- VALUE / MOMENTUM LOGIC ------------------
+
+
+def get_value_momentum_signal(
+    rsi,
+    pct_from_high,
+    pct_1m,
+    fpe_1y,
+    fpe_2y,
+    discount_pct
+):
+    """
+    New logic (no PEG):
+
+    - Uses:
+        * RSI
+        * % from 52w High
+        * Fwd P/E (+1y)
+        * Fwd P/E (+2y)
+        * Discount % vs Fair Val (+2y, 20x)
+    """
+
+    # 1. Basic data sanity
+    if rsi is None or pct_from_high is None:
+        return "❔ Check data"
+
+    # 2. 🔴 HOT / EXTENDED (Kill switches)
+    # Overbought on momentum alone
+    if rsi > 75:
+        return "🔴 Hot / extended (RSI)"
+
+    # Near highs and expensive even on +2y
+    if pct_from_high > -5 and fpe_2y is not None and fpe_2y > 30:
+        return "🔴 Hot / extended (Val)"
+
+    # Clearly overpriced vs fair value if we have Discount %
+    if discount_pct is not None and discount_pct < -10:
+        return "🔴 Hot / extended (Over fair)"
+
+    # 3. 💚 DEEP VALUE PULLBACK
+    is_oversold = (rsi < 40 and pct_from_high <= -25)
+
+    is_cheap_now = (
+        (fpe_1y is not None and fpe_1y < 28) and
+        (fpe_2y is not None and fpe_2y < 18)
+    )
+
+    has_big_discount = (
+        discount_pct is not None and discount_pct >= 20
+    )
+
+    if is_oversold and is_cheap_now and has_big_discount:
+        return "💚 Deep value pullback"
+
+    # 4. 🟡 VALUE WATCH
+    # Decent pullback, reasonable valuation, some discount
+    if rsi < 55 and pct_from_high <= -15:
+        cond_pe1 = (fpe_1y is not None and fpe_1y < 32)
+        cond_pe2 = (fpe_2y is None) or (fpe_2y < 22)
+        cond_disc = (discount_pct is None) or (discount_pct >= 5)
+
+        if cond_pe1 and cond_pe2 and cond_disc:
+            return "🟡 Value watch"
+
+    # 5. 🔵 MOMENTUM TREND
+    if 50 <= rsi <= 70 and (pct_1m is not None and pct_1m > 0):
+        return "🔵 Momentum trend"
+
+    # 6. Neutral
+    return "⚪ Neutral"
+
+
+def calculate_fair_value_from_eps2(price, eps_plus2, multiple=FAIR_PE_MULTIPLE):
+    """
+    Fair Value based on +2y EPS:
+
+    Fair Val (+2y) = EPS(+2y) * multiple
+    Discount % = (Fair - Price) / Fair * 100
+
+    Positive Discount % = price below fair (undervalued).
+    Negative Discount % = price above fair (overvalued).
+    """
+    if price is None or eps_plus2 is None or eps_plus2 <= 0:
+        return None, None
+
+    fair = eps_plus2 * multiple
+    if fair == 0:
+        return None, None
+
+    discount = (fair - price) / fair * 100
+    return fair, discount
+
+
 # -------------- REALTIME TICKER STATUS ------------------
 
 
 @st.cache_data(ttl=60)
 def get_ticker_status(symbol: str):
     """
-    Realtime-like status.
-
-    Priority 1: use Yahoo 'regularMarket*' fields from get_info()
-    Priority 2: fall back to 2-day daily history + 1m intraday.
-
     Returns (mode, price, change, change_pct, arrow).
     """
     # --------- PATH 1: regularMarket* from get_info() ----------
@@ -80,7 +172,7 @@ def get_ticker_status(symbol: str):
                 arrow = "▼"
             else:
                 mode = "neutral"
-                arrow = "▶"
+            arrow = "▶" if change == 0 else arrow
 
             return mode, price, change, change_pct, arrow
     except Exception:
@@ -128,10 +220,6 @@ def get_ticker_status(symbol: str):
 
 @st.cache_data(ttl=300)
 def get_market_state(symbol: str):
-    """
-    Determine if a market is Open/Closed based on Yahoo's marketState.
-    If unknown, default to Closed.
-    """
     try:
         t = yf.Ticker(symbol)
         info = t.get_info()
@@ -147,9 +235,6 @@ def get_market_state(symbol: str):
 
 
 def is_regular_trading_hours():
-    """
-    US market cash session: Mon–Fri, 09:30–16:00 US/Eastern.
-    """
     now_et = pd.Timestamp.now(tz="US/Eastern")
     if now_et.weekday() >= 5:
         return False
@@ -267,18 +352,19 @@ with st.sidebar:
         "Drawdown from 52w High (%)",
         min_value=0,
         max_value=80,
-        value=25,
+        value=20,
         step=1,
-        help="Minimum discount from 52-week high required (move right for bigger discount).",
+        help="Minimum discount from 52-week high.",
     )
     min_dd = -float(dd_required)
+
     max_fpe = st.slider(
-        "Max Forward P/E",
+        "Max Forward P/E (+1y)",
         min_value=5,
         max_value=80,
         value=40,
         step=1,
-        help="Upper limit for forward P/E in buy-zone candidates.",
+        help="Upper limit for forward P/E (+1y) in buy-zone candidates.",
     )
     only_value = st.checkbox(
         "Only value signals (💚 / 🟡)",
@@ -304,7 +390,7 @@ st.caption(
 # -------------- MACRO / SECTOR / GLOBAL STRIPS ------------------
 
 US_MACRO_ETFS = [
-    ("MARKET", "Market (QQQ / QQQ Futures)"),  # synthetic
+    ("MARKET", "Market (QQQ / QQQ Futures)"),
     ("ARKK", "Disruptive Growth"),
     ("MEME", "Meme Beta"),
     ("SMH", "Semiconductors"),
@@ -325,7 +411,6 @@ GLOBAL_INDICES = [
     ("^FCHI", "France (CAC40)"),
 ]
 
-# Status map for all real symbols
 real_symbols = [t for t, _ in US_MACRO_ETFS if t != "MARKET"] + [t for t, _ in GLOBAL_INDICES]
 status_map = {sym: get_ticker_status(sym) for sym in real_symbols}
 status_map["MARKET"] = (active_mode, active_price, None, active_change_pct, active_arrow)
@@ -342,18 +427,10 @@ if price_ssec is None:
 market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
 market_state_map["MARKET"] = get_market_state(active_symbol)
 
-
 st.markdown("### US Macro & Sector Pulse")
 
 
 def render_card(label, ticker_display, status_tuple, market_state: str, show_state: bool):
-    """
-    Card renderer.
-
-    - Colours label by % move.
-    - If show_state is True and market_state == 'Closed' -> appends red '· Closed'.
-    - Never prints 'Open' anywhere.
-    """
     mode, price, _, chg_pct, arrow = status_tuple
     if price is None or chg_pct is None:
         html = (
@@ -392,7 +469,7 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
 
 cards_per_row = 4
 for i in range(0, len(US_MACRO_ETFS), cards_per_row):
-    row = US_MACRO_ETFS[i : i + cards_per_row]
+    row = US_MACRO_ETFS[i: i + cards_per_row]
     cols = st.columns(len(row))
     for (ticker, label), col in zip(row, cols):
         with col:
@@ -415,7 +492,7 @@ for i in range(0, len(US_MACRO_ETFS), cards_per_row):
 st.markdown("### Global Indices Pulse")
 
 for i in range(0, len(GLOBAL_INDICES), cards_per_row):
-    row = GLOBAL_INDICES[i : i + cards_per_row]
+    row = GLOBAL_INDICES[i: i + cards_per_row]
     cols = st.columns(len(row))
     for (ticker, label), col in zip(row, cols):
         with col:
@@ -428,161 +505,19 @@ for i in range(0, len(GLOBAL_INDICES), cards_per_row):
 # -------------- TICKER UNIVERSES ------------------
 
 TOP_TECH_TICKERS = [
-    "MSFT",
-    "AMZN",
-    "GOOG",
-    "NVDA",
-    "META",
-    "TSM",
-    "AVGO",
-    "ORCL",
-    "CRM",
-    "AMD",
-    "NOW",
-    "MU",
-    "SNOW",
-    "PLTR",
-    "ANET",
-    "CRWD",
-    "PANW",
-    "NET",
-    "DDOG",
-    "MDB",
-    "MRVL",
-    "IBM",
-    "AMKR",
-    "SMCI",
-    "AXON",
-    "ISRG",
+    "MSFT", "AMZN", "GOOG", "NVDA", "META", "TSM", "AVGO", "ORCL", "CRM", "AMD",
+    "NOW", "MU", "SNOW", "PLTR", "ANET", "CRWD", "PANW", "NET", "DDOG", "MDB",
+    "MRVL", "IBM", "AMKR", "SMCI", "AXON", "ISRG",
 ]
 
 NASDAQ100_TICKERS = [
-    "ADBE",
-    "AMD",
-    "ABNB",
-    "GOOGL",
-    "GOOG",
-    "AMZN",
-    "AEP",
-    "AMGN",
-    "ADI",
-    "AAPL",
-    "AMAT",
-    "APP",
-    "ARM",
-    "ASML",
-    "AZN",
-    "TEAM",
-    "ADSK",
-    "ADP",
-    "AXON",
-    "BKR",
-    "BIIB",
-    "BKNG",
-    "AVGO",
-    "CDNS",
-    "CDW",
-    "CHTR",
-    "CTAS",
-    "CSCO",
-    "CCEP",
-    "CTSH",
-    "CMCSA",
-    "CEG",
-    "CPRT",
-    "CSGP",
-    "COST",
-    "CRWD",
-    "CSX",
-    "DDOG",
-    "DXCM",
-    "FANG",
-    "DASH",
-    "EA",
-    "EXC",
-    "FAST",
-    "FTNT",
-    "GEHC",
-    "GILD",
-    "GFS",
-    "HON",
-    "IDXX",
-    "INTC",
-    "INTU",
-    "ISRG",
-    "KDP",
-    "KLAC",
-    "KHC",
-    "LRCX",
-    "LIN",
-    "LULU",
-    "MAR",
-    "MRVL",
-    "MELI",
-    "META",
-    "MCHP",
-    "MU",
-    "MSFT",
-    "MSTR",
-    "MDLZ",
-    "MNST",
-    "NFLX",
-    "NVDA",
-    "NXPI",
-    "ORLY",
-    "ODFL",
-    "ON",
-    "PCAR",
-    "PLTR",
-    "PANW",
-    "PAYX",
-    "PYPL",
-    "PDD",
-    "PEP",
-    "QCOM",
-    "REGN",
-    "ROP",
-    "ROST",
-    "SHOP",
-    "SOLS",
-    "SBUX",
-    "SNPS",
-    "TMUS",
-    "TTWO",
-    "TSLA",
-    "TXN",
-    "TRI",
-    "TTD",
-    "VRSK",
-    "VRTX",
-    "WBD",
-    "WDAY",
-    "XEL",
-    "ZS",
+    "ADBE", "AMD", "ABNB", "GOOGL", "GOOG", "AMZN", "AAPL", "AMAT", "ARM", "ASML",
+    "AVGO", "CDNS", "CSCO", "COST", "CRWD", "DDOG", "META", "MU", "MSFT", "NFLX",
+    "NVDA", "ORLY", "PLTR", "PANW", "PYPL", "PEP", "QCOM", "TSLA", "TXN", "WDAY",
 ]
 
 
 # -------------- HELPERS FOR TABLES ------------------
-
-
-def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
-    if rsi is None or pct_from_high is None:
-        return "❔ Check data"
-
-    if rsi < 35 and pct_from_high <= -30 and (fpe is None or fpe <= 30):
-        return "💚 Deep value pullback"
-
-    if rsi < 50 and pct_from_high <= -15 and (fpe is None or fpe <= 35):
-        return "🟡 Value watch"
-
-    if 50 <= rsi <= 70 and (pct_1m is not None and pct_1m > 0):
-        return "🔵 Momentum trend"
-
-    if rsi > 70 or (pct_from_high >= -5 and (fpe is not None and fpe >= 45)):
-        return "🔴 Hot / extended"
-
-    return "⚪ Neutral"
-
 
 def rsi_zone_text(rsi_val: float) -> str:
     if rsi_val < 30:
@@ -613,7 +548,6 @@ def rsi_zone_style(val):
     return "color: #ef4444; font-weight: 600;"
 
 
-# base colours for gradients
 RED = (239, 68, 68)
 BLACK = (0, 0, 0)
 GREEN = (34, 197, 94)
@@ -655,6 +589,85 @@ def color_bipolar(v, vmin, vmax):
     return _rgb_css(col)
 
 
+def price_1d_style(val):
+    if val is None or val == "–":
+        return ""
+    try:
+        inside = val.split("(")[1].split("%")[0]
+        pct = float(inside)
+    except Exception:
+        return ""
+    if pct > 0:
+        return "color: #22c55e; font-weight: 600;"
+    if pct < 0:
+        return "color: #ef4444; font-weight: 600;"
+    return "color: #e5e5e5; font-weight: 600;"
+
+
+def format_price_1d(row):
+    price = row.get("Price", None)
+    pct_1d = row.get("% 1D", None)
+    if pd.isna(price) and pd.isna(pct_1d):
+        return "–"
+    if pd.isna(pct_1d):
+        return f"${price:,.2f}"
+    return f"${price:,.2f} ({pct_1d:+.1f}%)"
+
+
+def discount_style(val):
+    if pd.isna(val):
+        return ""
+    if val > 20:
+        return "color: #22c55e; font-weight: 800;"  # Deep discount
+    if val > 0:
+        return "color: #22c55e; font-weight: 600;"
+    if val < 0:
+        return "color: #ef4444; font-weight: 500;"
+    return ""
+
+
+def pct1d_style(val):
+    if pd.isna(val):
+        return ""
+    if val > 0:
+        return "color: #22c55e; font-weight: 600;"
+    if val < 0:
+        return "color: #ef4444; font-weight: 600;"
+    return "color: #e5e5e5; font-weight: 600;"
+
+
+def price_style(row):
+    val = row.get("% 1D", None)
+    if pd.isna(val):
+        return [""]
+    if val > 0:
+        return ["color: #22c55e; font-weight: 600;"]
+    if val < 0:
+        return ["color: #ef4444; font-weight: 600;"]
+    return ["color: #e5e5e5; font-weight: 600;"]
+
+
+BASE_COLUMN_CONFIG = {
+    col: st.column_config.Column(width="fit")
+    for col in [
+        "Price", "Price & 1D", "% 1D", "% 5D", "% 1M",
+        "% from 52w High", "RSI Zone", "Value Signal",
+        "P/E", "Fwd P/E (+1y)", "Fwd P/E (+2y)",
+        "Fair Val (+2y)", "Discount %"
+    ]
+}
+
+
+def build_column_config(columns):
+    cfg = {}
+    for col in columns:
+        if col in BASE_COLUMN_CONFIG:
+            cfg[col] = BASE_COLUMN_CONFIG[col]
+        else:
+            cfg[col] = st.column_config.Column(width="fit")
+    return cfg
+
+
 @st.cache_data(ttl=60)
 def get_stock_summary(tickers):
     rows = []
@@ -677,13 +690,11 @@ def get_stock_summary(tickers):
 
             pct_5d = (
                 round((price - float(close.iloc[-6])) / float(close.iloc[-6]) * 100, 2)
-                if len(close) >= 6
-                else None
+                if len(close) >= 6 else None
             )
             pct_1m = (
                 round((price - float(close.iloc[-22])) / float(close.iloc[-22]) * 100, 2)
-                if len(close) >= 22
-                else None
+                if len(close) >= 22 else None
             )
 
             high_52wk = float(close.max())
@@ -691,17 +702,19 @@ def get_stock_summary(tickers):
 
             rsi_series = RSIIndicator(close=close).rsi()
             rsi_val = float(round(rsi_series.iloc[-1], 2))
+            rsi_zone_str = rsi_zone_text(rsi_val)
 
+            # Info for trailing P/E and market cap
             try:
                 info = stock.get_info()
             except Exception:
                 info = {}
 
-            pe = info.get("trailingPE", None)
+            pe_trailing = info.get("trailingPE", None)
             try:
-                pe = float(pe)
+                pe_trailing = float(pe_trailing)
             except Exception:
-                pe = None
+                pe_trailing = None
 
             market_cap = info.get("marketCap", None)
             try:
@@ -709,43 +722,65 @@ def get_stock_summary(tickers):
             except Exception:
                 market_cap = None
 
-            fpe = None
-            forward_eps = None
+            # ---------- FORWARD EPS (+1y, +2y) ----------
+            eps_plus1 = None
+            eps_plus2 = None
+
             try:
                 eps_trend = stock.get_eps_trend()
-                if eps_trend is not None and not eps_trend.empty:
-                    idx = None
-                    for candidate in ["+1y", "0y"]:
-                        if candidate in eps_trend.index:
-                            idx = candidate
-                            break
-                    if idx is not None and "current" in eps_trend.columns:
-                        val = eps_trend.loc[idx, "current"]
-                        if pd.notna(val):
-                            forward_eps = float(val)
             except Exception:
-                forward_eps = None
+                eps_trend = None
 
-            if forward_eps is None:
+            if eps_trend is not None and not eps_trend.empty:
+                if "+1y" in eps_trend.index and "current" in eps_trend.columns:
+                    val1 = eps_trend.loc["+1y", "current"]
+                    if pd.notna(val1):
+                        eps_plus1 = float(val1)
+                if "+2y" in eps_trend.index and "current" in eps_trend.columns:
+                    val2 = eps_trend.loc["+2y", "current"]
+                    if pd.notna(val2):
+                        eps_plus2 = float(val2)
+
+            # Fallback for +1y using forwardEps if needed
+            if eps_plus1 is None:
                 try:
                     fe = info.get("forwardEps", None)
-                    forward_eps = float(fe) if fe is not None else None
+                    if fe is not None:
+                        eps_plus1 = float(fe)
                 except Exception:
-                    forward_eps = None
+                    eps_plus1 = None
 
-            if forward_eps and forward_eps > 0:
+            # Compute forward P/Es
+            fpe_1y = None
+            fpe_2y = None
+
+            if eps_plus1 is not None and eps_plus1 > 0:
                 try:
-                    fpe = round(price / forward_eps, 2)
+                    fpe_1y = round(price / eps_plus1, 2)
                 except ZeroDivisionError:
-                    fpe = None
+                    fpe_1y = None
 
-            rsi_zone_str = rsi_zone_text(rsi_val)
+            if eps_plus2 is not None and eps_plus2 > 0:
+                try:
+                    fpe_2y = round(price / eps_plus2, 2)
+                except ZeroDivisionError:
+                    fpe_2y = None
 
+            # Fair value based on +2y EPS
+            fair_val_2y, discount_pct = calculate_fair_value_from_eps2(
+                price=price,
+                eps_plus2=eps_plus2,
+                multiple=FAIR_PE_MULTIPLE,
+            )
+
+            # Value signal
             value_signal = get_value_momentum_signal(
                 rsi=rsi_val,
                 pct_from_high=pct_from_52wk,
                 pct_1m=pct_1m,
-                fpe=fpe,
+                fpe_1y=fpe_1y,
+                fpe_2y=fpe_2y,
+                discount_pct=discount_pct,
             )
 
             rows.append(
@@ -758,8 +793,11 @@ def get_stock_summary(tickers):
                     "% from 52w High": pct_from_52wk,
                     "RSI Zone": rsi_zone_str,
                     "Value Signal": value_signal,
-                    "P/E": pe,
-                    "Fwd P/E": fpe,
+                    "P/E": pe_trailing,
+                    "Fwd P/E (+1y)": fpe_1y,
+                    "Fwd P/E (+2y)": fpe_2y,
+                    "Fair Val (+2y)": fair_val_2y,
+                    "Discount %": discount_pct,
                     "Market Cap": market_cap,
                 }
             )
@@ -768,88 +806,6 @@ def get_stock_summary(tickers):
             continue
 
     return pd.DataFrame(rows)
-
-
-BASE_COLUMN_CONFIG = {
-    col: st.column_config.Column(width="fit")
-    for col in [
-        "Price",        # still used in Buy-Zone section
-        "Price & 1D",   # new combined column for main tables
-        "% 1D",
-        "% 5D",
-        "% 1M",
-        "% from 52w High",
-        "RSI Zone",
-        "Value Signal",
-        "P/E",
-        "Fwd P/E",
-    ]
-}
-
-
-def build_column_config(columns):
-    cfg = {}
-    for col in columns:
-        if col in BASE_COLUMN_CONFIG:
-            cfg[col] = BASE_COLUMN_CONFIG[col]
-        else:
-            cfg[col] = st.column_config.Column(width="fit")
-    return cfg
-
-
-# styling for separate Price/%1D (used in Buy-Zone candidates)
-def price_style(row):
-    val = row.get("% 1D", None)
-    if pd.isna(val):
-        return [""]
-    if val > 0:
-        return ["color: #22c55e; font-weight: 600;"]
-    if val < 0:
-        return ["color: #ef4444; font-weight: 600;"]
-    return ["color: #e5e5e5; font-weight: 600;"]
-
-
-def pct1d_style(val):
-    if pd.isna(val):
-        return ""
-    if val > 0:
-        return "color: #22c55e; font-weight: 600;"
-    if val < 0:
-        return "color: #ef4444; font-weight: 600;"
-    return "color: #e5e5e5; font-weight: 600;"
-
-
-# NEW: style for combined "Price & 1D" column
-def price_1d_style(val):
-    """
-    Style for 'Price & 1D' column:
-    - green if 1D % > 0
-    - red if 1D % < 0
-    - grey otherwise
-    """
-    if val is None or val == "–":
-        return ""
-    try:
-        # "$180.62 (+1.4%)"
-        inside = val.split("(")[1].split("%")[0]
-        pct = float(inside)
-    except Exception:
-        return ""
-    if pct > 0:
-        return "color: #22c55e; font-weight: 600;"
-    if pct < 0:
-        return "color: #ef4444; font-weight: 600;"
-    return "color: #e5e5e5; font-weight: 600;"
-
-
-def format_price_1d(row):
-    price = row["Price"]
-    pct_1d = row["% 1D"]
-    if pd.isna(price) and pd.isna(pct_1d):
-        return "–"
-    if pd.isna(pct_1d):
-        return f"${price:,.2f}"
-    return f"${price:,.2f} ({pct_1d:+.1f}%)"
 
 
 # -------------- TABLE 1: TECH LEADERSHIP ------------------
@@ -865,7 +821,6 @@ with st.spinner("📡 Fetching data for Tech leadership table..."):
 
 if not df.empty:
     df = df.set_index("Ticker")
-
     if "Market Cap" in df.columns:
         df_sorted = df.sort_values("Market Cap", ascending=False)
     else:
@@ -873,7 +828,7 @@ if not df.empty:
 
     df_display = df_sorted.drop(columns=["Market Cap"], errors="ignore")
 
-    # --- NEW: combined column ---
+    # Combined Price & 1D column right after Ticker
     df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
     df_display = df_display.drop(columns=["Price", "% 1D"])
 
@@ -883,11 +838,15 @@ if not df.empty:
         "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
         "P/E": "{:.1f}",
-        "Fwd P/E": "{:.1f}",
+        "Fwd P/E (+1y)": "{:.1f}",
+        "Fwd P/E (+2y)": "{:.1f}",
+        "Fair Val (+2y)": "${:,.2f}",
+        "Discount %": "{:+.1f}%",
     }
 
     styled = df_display.style.format(format_dict, na_rep="–")
 
+    # Heatmaps for short-term performance
     pct_cols = ["% 5D", "% 1M"]
     dist_col = "% from 52w High"
 
@@ -920,6 +879,7 @@ if not df.empty:
 
     styled = styled.applymap(rsi_zone_style, subset=["RSI Zone"])
     styled = styled.applymap(price_1d_style, subset=["Price & 1D"])
+    styled = styled.applymap(discount_style, subset=["Discount %"])
 
     column_config = build_column_config(df_display.columns)
 
@@ -936,10 +896,7 @@ else:
 # -------------- TABLE 2: NASDAQ-100 DEEP DRAWDOWN ------------------
 
 st.markdown("---")
-st.markdown(
-    "<h2>NASDAQ 100 DEEP DRAWDOWN RADAR</h2>",
-    unsafe_allow_html=True,
-)
+st.markdown("<h2>NASDAQ 100 DEEP DRAWDOWN RADAR</h2>", unsafe_allow_html=True)
 
 with st.spinner("📡 Fetching Nasdaq-100 data..."):
     df_ndx = get_stock_summary(NASDAQ100_TICKERS)
@@ -949,7 +906,6 @@ if not df_ndx.empty:
     df_ndx = df_ndx.sort_values("% from 52w High")
     df_ndx_display = df_ndx.drop(columns=["Market Cap"], errors="ignore")
 
-    # --- NEW: combined column for Nasdaq table ---
     df_ndx_display["Price & 1D"] = df_ndx_display.apply(format_price_1d, axis=1)
     df_ndx_display = df_ndx_display.drop(columns=["Price", "% 1D"])
 
@@ -959,7 +915,10 @@ if not df_ndx.empty:
         "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
         "P/E": "{:.1f}",
-        "Fwd P/E": "{:.1f}",
+        "Fwd P/E (+1y)": "{:.1f}",
+        "Fwd P/E (+2y)": "{:.1f}",
+        "Fair Val (+2y)": "${:,.2f}",
+        "Discount %": "{:+.1f}%",
     }
 
     styled_ndx = df_ndx_display.style.format(ndx_format_dict, na_rep="–")
@@ -996,6 +955,7 @@ if not df_ndx.empty:
 
     styled_ndx = styled_ndx.applymap(rsi_zone_style, subset=["RSI Zone"])
     styled_ndx = styled_ndx.applymap(price_1d_style, subset=["Price & 1D"])
+    styled_ndx = styled_ndx.applymap(discount_style, subset=["Discount %"])
 
     ndx_column_config = build_column_config(df_ndx_display.columns)
 
@@ -1035,13 +995,15 @@ def build_buy_candidates(df_tech, df_nasdaq):
 
     mask &= base["% from 52w High"] <= min_dd
     mask &= base["RSI_numeric"] < 55
-    mask &= base["Fwd P/E"].notna()
-    mask &= base["Fwd P/E"] <= float(max_fpe)
+    mask &= base["Fwd P/E (+1y)"].notna()
+    mask &= base["Fwd P/E (+1y)"] <= float(max_fpe)
+
+    # Prefer names not trading above fair value, if Discount % available
+    if "Discount %" in base.columns:
+        mask &= base["Discount %"].isna() | (base["Discount %"] >= 0)
 
     if only_value:
-        mask &= base["Value Signal"].str.contains(
-            "Deep value pullback|Value watch", na=False
-        )
+        mask &= base["Value Signal"].str.contains("Deep value pullback|Value watch", na=False)
 
     candidates = base.loc[mask].copy()
     if candidates.empty:
@@ -1057,14 +1019,21 @@ else:
     candidates = pd.DataFrame()
 
 if not candidates.empty:
-    show_cols = ["Price", "% 1D", "% from 52w High", "RSI Zone", "Fwd P/E", "Value Signal"]
+    show_cols = [
+        "Price", "% 1D", "% from 52w High", "RSI Zone",
+        "Fwd P/E (+1y)", "Fwd P/E (+2y)", "Fair Val (+2y)",
+        "Discount %", "Value Signal",
+    ]
     candidates_display = candidates[show_cols]
 
     cand_format = {
         "Price": "${:,.2f}",
         "% 1D": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
-        "Fwd P/E": "{:.1f}",
+        "Fwd P/E (+1y)": "{:.1f}",
+        "Fwd P/E (+2y)": "{:.1f}",
+        "Fair Val (+2y)": "${:,.2f}",
+        "Discount %": "{:+.1f}%",
     }
 
     cand_styled = candidates_display.style.format(cand_format, na_rep="–")
@@ -1078,6 +1047,7 @@ if not candidates.empty:
     cand_styled = cand_styled.applymap(rsi_zone_style, subset=["RSI Zone"])
     cand_styled = cand_styled.apply(lambda row: price_style(row), subset=["Price"], axis=1)
     cand_styled = cand_styled.applymap(pct1d_style, subset=["% 1D"])
+    cand_styled = cand_styled.applymap(discount_style, subset=["Discount %"])
 
     st.dataframe(
         cand_styled,
@@ -1085,22 +1055,28 @@ if not candidates.empty:
         height=400,
     )
 else:
-    st.write(
-        "No tickers currently match your buy-zone criteria. "
-        "Loosen filters in the sidebar to widen the search."
-    )
+    st.write("No tickers currently match your buy-zone criteria. Loosen filters in the sidebar.")
 
 
 # -------------- HOW TO READ THE SIGNALS ------------------
 
 st.markdown("---")
 st.markdown(
-    """
-**Value Signal (combined value + momentum)**  
-- 💚 **Deep value pullback** – Big drawdown vs 52-week high, low or reasonable forward P/E, weak RSI.  
-- 🟡 **Value watch** – Decent pullback, valuation reasonable but not screaming.  
-- 🔵 **Momentum trend** – Positive 1-month performance with RSI in 50–70 zone.  
-- 🔴 **Hot / extended** – Near highs and/or expensive forward P/E, or overbought RSI.  
-- ⚪ **Neutral** – No strong edge from value or momentum.
+    f"""
+### 🧠 Signal Logic & Fair Value
+
+- **Fwd P/E (+1y)** – price divided by analysts' next-year EPS.
+- **Fwd P/E (+2y)** – price divided by analysts' EPS two years out (AI inflection year).
+- **Fair Val (+2y)** – EPS(+2y) × {FAIR_PE_MULTIPLE:.0f}, i.e. fair price at a {FAIR_PE_MULTIPLE:.0f}× P/E on 2-year-forward earnings.
+- **Discount %** – how far today's price is below or above that fair value.
+    - Positive = price below fair (potential value).
+    - Negative = price above fair (over fair).
+
+**Value Signals (summary):**
+- 💚 **Deep value pullback** – big drawdown, oversold RSI, cheap on both +1y/+2y P/E, and trading well below fair value.
+- 🟡 **Value watch** – decent pullback, reasonable forward multiples, some margin to fair value.
+- 🔵 **Momentum trend** – healthy RSI with positive 1M trend.
+- 🔴 **Hot / extended** – overbought, expensive even on +2y earnings, or above fair value.
+- ⚪ **Neutral** – no strong edge from value or momentum.
 """
 )
