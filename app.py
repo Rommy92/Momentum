@@ -303,6 +303,7 @@ st.caption(
 
 # -------------- MACRO / SECTOR / GLOBAL STRIPS ------------------
 
+# Removed Oil (USO) so we have 8 cards -> 2x4 grid
 US_MACRO_ETFS = [
     ("MARKET", "Market (QQQ / QQQ Futures)"),  # synthetic
     ("ARKK", "Disruptive Growth"),
@@ -311,10 +312,10 @@ US_MACRO_ETFS = [
     ("XLF", "Financials"),
     ("TLT", "Bonds"),
     ("UUP", "US Dollar"),
-    ("USO", "Oil"),
     ("GLD", "Gold"),
 ]
 
+# Added Germany & France to make 8 indices -> 2x4 grid
 GLOBAL_INDICES = [
     ("^SSEC", "China (Shanghai)"),
     ("^KS11", "Korea (KOSPI)"),
@@ -322,6 +323,8 @@ GLOBAL_INDICES = [
     ("^TWII", "Taiwan (TAIEX)"),
     ("^STOXX50E", "Europe (EuroStoxx50)"),
     ("^FTSE", "UK (FTSE 100)"),
+    ("^GDAXI", "Germany (DAX)"),
+    ("^FCHI", "France (CAC40)"),
 ]
 
 # Status map for all real symbols
@@ -707,7 +710,7 @@ df = pd.DataFrame()
 df_ndx = pd.DataFrame()
 
 st.markdown("---")
-st.markdown("## Tech Leadership")
+st.markdown("## Megacap & Core")
 
 with st.spinner("📡 Fetching data for Tech leadership table..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
