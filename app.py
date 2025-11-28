@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import datetime as dt
 from ta.momentum import RSIIndicator
+import requests
 
 # -------------- PAGE CONFIG ------------------
 st.set_page_config(
@@ -86,6 +87,63 @@ def get_ticker_status(symbol: str):
         return "neutral", None, None, None, "▶"
 
 
+@st.cache_data(ttl=300)
+def get_market_state(symbol: str):
+    """
+    Try to determine if a market is Open/Closed based on Yahoo's marketState.
+    Returns 'Open', 'Closed', or None.
+    """
+    try:
+        t = yf.Ticker(symbol)
+        info = t.get_info()
+    except Exception:
+        return None
+
+    state = str(info.get("marketState", "")).upper()
+    if state in ("REGULAR", "PRE", "POST"):
+        return "Open"
+    if state == "CLOSED":
+        return "Closed"
+    return None
+
+
+@st.cache_data(ttl=600)
+def get_fear_greed_index():
+    """
+    Fetch CNN-style Fear & Greed index.
+    If the endpoint fails or changes, return None and the app will just
+    show 'data unavailable'.
+    """
+    try:
+        url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+        resp = requests.get(url, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        # latest is last in 'fear_and_greed_historical'
+        hist = data.get("fear_and_greed_historical", [])
+        if not hist:
+            return None
+        latest = hist[-1]
+        value = int(latest.get("value"))
+        return value
+    except Exception:
+        return None
+
+
+def classify_fear_greed(value: int) -> str:
+    if value is None:
+        return "Unavailable"
+    if value < 25:
+        return "Extreme Fear"
+    if value < 45:
+        return "Fear"
+    if value < 55:
+        return "Neutral"
+    if value < 75:
+        return "Greed"
+    return "Extreme Greed"
+
+
 def is_regular_trading_hours():
     """
     US market cash session: Mon–Fri, 09:30–16:00 US/Eastern.
@@ -105,12 +163,14 @@ fut_mode, fut_price, fut_change, fut_change_pct, fut_arrow = get_ticker_status("
 
 if is_regular_trading_hours() or fut_price is None:
     active_label = "QQQ"
+    active_symbol = "QQQ"
     active_mode = qqq_mode
     active_price = qqq_price
     active_change_pct = qqq_change_pct
     active_arrow = qqq_arrow
 else:
     active_label = "QQQ Futures"
+    active_symbol = "NQ=F"
     active_mode = fut_mode
     active_price = fut_price
     active_change_pct = fut_change_pct
@@ -244,10 +304,11 @@ else:
 st.caption(f"Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
-# -------------- MACRO / SECTOR / WORLD STRIP ------------------
+# -------------- MACRO / SECTOR / GLOBAL STRIPS ------------------
 
-# Define macro & world ETFs (excluding the market card)
-MACRO_WORLD_ETFS = [
+# US macro & sector layer (including MARKET card)
+US_MACRO_ETFS = [
+    ("MARKET", "Market"),         # synthetic, uses active_* values
     ("ARKK", "Disruptive Growth"),
     ("MEME", "Meme Beta"),
     ("SMH", "Semiconductors"),
@@ -256,27 +317,34 @@ MACRO_WORLD_ETFS = [
     ("UUP", "US Dollar"),
     ("USO", "Oil"),
     ("GLD", "Gold"),
-    ("FXI", "China"),
-    ("EWY", "Korea"),
-    ("EWJ", "Japan"),
-    ("EWT", "Taiwan"),
-    ("VGK", "Europe"),
-    ("EWU", "UK"),
 ]
 
-# Fetch statuses for all ETFs
-macro_world_status = {t: get_ticker_status(t) for t, _ in MACRO_WORLD_ETFS}
+# Global indices (real home indices)
+GLOBAL_INDICES = [
+    ("^SSEC", "China (Shanghai)"),
+    ("^KS11", "Korea (KOSPI)"),
+    ("^N225", "Japan (Nikkei)"),
+    ("^TWII", "Taiwan (TAIEX)"),
+    ("^STOXX50E", "Europe (EuroStoxx50)"),
+    ("^FTSE", "UK (FTSE 100)"),
+]
 
-# Build a combined list including the Market card at the front
-macro_cards = [("MARKET", "Market")] + MACRO_WORLD_ETFS
+# Fetch realtime status for all *real* symbols
+real_symbols = [t for t, _ in US_MACRO_ETFS if t != "MARKET"] + [t for t, _ in GLOBAL_INDICES]
+status_map = {sym: get_ticker_status(sym) for sym in real_symbols}
+# MARKET uses active_* already computed
+status_map["MARKET"] = (active_mode, active_price, None, active_change_pct, active_arrow)
 
-# We'll inject the active status for MARKET manually
-card_status = dict(macro_world_status)
-card_status["MARKET"] = (active_mode, active_price, None, active_change_pct, active_arrow)
+# Market state (Open/Closed) for all real symbols
+market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
+# MARKET state derived from underlying symbol (QQQ or NQ=F)
+market_state_map["MARKET"] = get_market_state(active_symbol)
 
-st.markdown("### Macro, Sector & Global Pulse")
 
-def render_card(label, ticker, status_tuple):
+st.markdown("### US Macro & Sector Pulse")
+
+
+def render_card(label, ticker, status_tuple, market_state: str):
     mode, price, _, chg_pct, arrow = status_tuple
     if price is None or chg_pct is None:
         html = (
@@ -296,28 +364,81 @@ def render_card(label, ticker, status_tuple):
     else:
         txt_color = "#e5e5e5"
 
+    # Market open/closed badge
+    if market_state == "Open":
+        state_html = "<span style='color:#22c55e;'>· Open</span>"
+    elif market_state == "Closed":
+        state_html = "<span style='color:#9ca3af;'>· Closed</span>"
+    else:
+        state_html = "<span style='color:#9ca3af;'>· State N/A</span>"
+
     html = (
         f"<div style='border:1px solid #1f2933; padding:0.5rem; "
         f"border-radius:0.75rem; background-color:#050505;'>"
         f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
         f"<div style='font-weight:600; color:{txt_color};'>"
-        f"{ticker} {arrow} {price:.2f} ({chg_pct:+.2f}%)"
+        f"{ticker} {arrow} {price:.2f} ({chg_pct:+.2f}%) {state_html}"
         f"</div>"
         f"</div>"
     )
     return html
 
-# Render cards in rows of 4
+
 cards_per_row = 4
-for i in range(0, len(macro_cards), cards_per_row):
-    row = macro_cards[i:i + cards_per_row]
+for i in range(0, len(US_MACRO_ETFS), cards_per_row):
+    row = US_MACRO_ETFS[i:i + cards_per_row]
     cols = st.columns(len(row))
     for (ticker, label), col in zip(row, cols):
         with col:
             st.markdown(
-                render_card(label, ticker, card_status[ticker]),
+                render_card(label, ticker, status_map[ticker], market_state_map[ticker]),
                 unsafe_allow_html=True,
             )
+
+st.markdown("### Global Indices Pulse")
+
+for i in range(0, len(GLOBAL_INDICES), cards_per_row):
+    row = GLOBAL_INDICES[i:i + cards_per_row]
+    cols = st.columns(len(row))
+    for (ticker, label), col in zip(row, cols):
+        with col:
+            st.markdown(
+                render_card(label, ticker, status_map[ticker], market_state_map[ticker]),
+                unsafe_allow_html=True,
+            )
+
+# Fear & Greed card
+st.markdown("### Sentiment Gauge")
+fg_value = get_fear_greed_index()
+fg_label = classify_fear_greed(fg_value)
+
+if fg_value is not None:
+    if fg_value < 25:
+        fg_color = "#ef4444"
+    elif fg_value < 45:
+        fg_color = "#f97316"
+    elif fg_value < 55:
+        fg_color = "#e5e5e5"
+    elif fg_value < 75:
+        fg_color = "#22c55e"
+    else:
+        fg_color = "#16a34a"
+    fg_text = f"{fg_value} – {fg_label}"
+else:
+    fg_color = "#9ca3af"
+    fg_text = "Data unavailable"
+
+st.markdown(
+    f"""
+    <div style='border:1px solid #1f2933; padding:0.75rem; border-radius:0.75rem;
+                background-color:#050505; max-width:320px;'>
+        <div style='font-size:0.8rem; color:#9ca3af;'>CNN Fear & Greed (Equities)</div>
+        <div style='font-weight:700; font-size:1.1rem; color:{fg_color};'>{fg_text}</div>
+        <div style='font-size:0.75rem; color:#9ca3af;'>Higher = Greed, Lower = Fear.</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # -------------- TICKER UNIVERSES ------------------
@@ -354,7 +475,6 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     if rsi is None or pct_from_high is None:
         return "❔ Check data"
 
-    # Allow missing Fwd P/E to still flag deep value/value watch
     if rsi < 35 and pct_from_high <= -30 and (fpe is None or fpe <= 30):
         return "💚 Deep value pullback"
 
@@ -464,7 +584,6 @@ def get_stock_summary(tickers):
             last_close = float(close.iloc[-1])
             price = float(price_rt) if price_rt is not None else last_close
 
-            # 5D & 1M returns use historical close as base, current realtime price as top
             pct_5d = (
                 round((price - float(close.iloc[-6])) / float(close.iloc[-6]) * 100, 2)
                 if len(close) >= 6 else None
