@@ -43,48 +43,91 @@ st.markdown(
 @st.cache_data(ttl=60)
 def get_ticker_status(symbol: str):
     """
-    Realtime-like status.
+    Realtime-like status using intraday data (incl. pre/post).
 
-    Priority 1: use Yahoo 'regularMarket*' fields from get_info()
-    Priority 2: fall back to 2-day daily history + 1m intraday.
+    Strategy:
+    - Previous close: 2-day daily history (last regular close).
+    - Current price: 1-minute intraday with prepost=True (includes pre/post).
+    - If either fails, fall back to Yahoo 'regularMarket*' / 'preMarket*' / 'postMarket*'.
 
-    Returns (mode, price, change, change_pct, arrow).
+    Returns: (mode, price, change, change_pct, arrow)
     """
-    # --------- PATH 1: regularMarket* from get_info() ----------
+    price = None
+    prev_close = None
+
+    # --- Try to get prev close from 2d daily history ---
     try:
         t = yf.Ticker(symbol)
-        info = t.get_info() or {}
+        daily = t.history(period="2d")
+        closes = daily.get("Close", pd.Series(dtype=float)).dropna()
 
-        price = info.get("regularMarketPrice", None)
-        change = info.get("regularMarketChange", None)
-        change_pct = info.get("regularMarketChangePercent", None)
-
-        if price is not None and change_pct is not None:
-            price = float(price)
-            change_pct = float(change_pct)
-
-            if change is not None:
-                change = float(change)
-            else:
-                try:
-                    prev_close = price / (1 + change_pct / 100.0)
-                    change = price - prev_close
-                except Exception:
-                    change = 0.0
-
-            if change > 0:
-                mode = "green"
-                arrow = "▲"
-            elif change < 0:
-                mode = "red"
-                arrow = "▼"
-            else:
-                mode = "neutral"
-                arrow = "▶"
-
-            return mode, price, change, change_pct, arrow
+        if len(closes) >= 2:
+            # penultimate close = yesterday's regular close
+            prev_close = float(closes.iloc[-2])
+        elif len(closes) == 1:
+            prev_close = float(closes.iloc[-1])
     except Exception:
-        pass
+        prev_close = None
+
+    # --- Try to get latest price from 1m intraday (incl. pre/post) ---
+    try:
+        if "t" not in locals():
+            t = yf.Ticker(symbol)
+        intra = t.history(period="1d", interval="1m", prepost=True)
+        intra_closes = intra.get("Close", pd.Series(dtype=float)).dropna()
+        if len(intra_closes) > 0:
+            price = float(intra_closes.iloc[-1])
+    except Exception:
+        price = None
+
+    # --- Fallbacks via get_info() ---
+    try:
+        if "t" not in locals():
+            t = yf.Ticker(symbol)
+        info = t.get_info() or {}
+    except Exception:
+        info = {}
+
+    # Fallback for price
+    if price is None:
+        for key in ("preMarketPrice", "postMarketPrice", "regularMarketPrice"):
+            v = info.get(key, None)
+            if v is not None:
+                try:
+                    price = float(v)
+                    break
+                except Exception:
+                    continue
+
+    # Fallback for previous close
+    if prev_close is None:
+        for key in ("regularMarketPreviousClose", "previousClose", "regularMarketPrice"):
+            v = info.get(key, None)
+            if v is not None:
+                try:
+                    prev_close = float(v)
+                    break
+                except Exception:
+                    continue
+
+    # If still missing critical data, bail out
+    if price is None or prev_close is None or prev_close == 0:
+        return "neutral", price, None, None, "▶"
+
+    change = price - prev_close
+    change_pct = (change / prev_close) * 100
+
+    if change > 0:
+        mode = "green"
+        arrow = "▲"
+    elif change < 0:
+        mode = "red"
+        arrow = "▼"
+    else:
+        mode = "neutral"
+        arrow = "▶"
+
+    return mode, price, change, change_pct, arrow
 
     # --------- PATH 2: 2d daily + 1m intraday ----------
     try:
