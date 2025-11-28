@@ -40,7 +40,7 @@ st.markdown(
 # -------------- REALTIME TICKER STATUS ------------------
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=15)
 def get_ticker_status(symbol: str):
     """
     Realtime-like status using intraday data (incl. pre/post).
@@ -995,3 +995,9 @@ st.markdown(
 - ⚪ **Neutral** – No strong edge from value or momentum.
 """
 )
+
+# Force a rerun every 15 seconds to keep the prices fresh
+# Note: This will use up the st.cache_data TTL more quickly, so ensure it matches (e.g., 15s)
+st.rerun() 
+# OR use a placeholder and time.sleep for a more controlled approach, 
+# but st.rerun() is simpler in modern Streamlit.
