@@ -6,6 +6,7 @@ from ta.momentum import RSIIndicator
 
 # -------------- CONSTANTS ------------------
 FAIR_PE_MULTIPLE = 20  # Fair P/E on +2y EPS for Fair Val (+2y)
+DEFAULT_GROWTH = 0.15  # 15% EPS growth fallback for +2y approximation
 
 
 # -------------- PAGE CONFIG ------------------
@@ -53,75 +54,59 @@ def get_value_momentum_signal(
     discount_pct
 ):
     """
-    New logic (no PEG):
+    No PEG version.
 
-    - Uses:
-        * RSI
-        * % from 52w High
-        * Fwd P/E (+1y)
-        * Fwd P/E (+2y)
-        * Discount % vs Fair Val (+2y, 20x)
+    Uses:
+      - RSI
+      - % from 52w High
+      - Fwd P/E (+1y)
+      - Fwd P/E (+2y)
+      - Discount % vs Fair Val (+2y, 20x)
     """
 
-    # 1. Basic data sanity
     if rsi is None or pct_from_high is None:
         return "❔ Check data"
 
-    # 2. 🔴 HOT / EXTENDED (Kill switches)
-    # Overbought on momentum alone
+    # 🔴 HOT / EXTENDED (kill switches)
     if rsi > 75:
         return "🔴 Hot / extended (RSI)"
 
-    # Near highs and expensive even on +2y
     if pct_from_high > -5 and fpe_2y is not None and fpe_2y > 30:
         return "🔴 Hot / extended (Val)"
 
-    # Clearly overpriced vs fair value if we have Discount %
     if discount_pct is not None and discount_pct < -10:
         return "🔴 Hot / extended (Over fair)"
 
-    # 3. 💚 DEEP VALUE PULLBACK
+    # 💚 DEEP VALUE PULLBACK
     is_oversold = (rsi < 40 and pct_from_high <= -25)
-
     is_cheap_now = (
         (fpe_1y is not None and fpe_1y < 28) and
         (fpe_2y is not None and fpe_2y < 18)
     )
-
-    has_big_discount = (
-        discount_pct is not None and discount_pct >= 20
-    )
+    has_big_discount = (discount_pct is not None and discount_pct >= 20)
 
     if is_oversold and is_cheap_now and has_big_discount:
         return "💚 Deep value pullback"
 
-    # 4. 🟡 VALUE WATCH
-    # Decent pullback, reasonable valuation, some discount
+    # 🟡 VALUE WATCH
     if rsi < 55 and pct_from_high <= -15:
         cond_pe1 = (fpe_1y is not None and fpe_1y < 32)
         cond_pe2 = (fpe_2y is None) or (fpe_2y < 22)
         cond_disc = (discount_pct is None) or (discount_pct >= 5)
-
         if cond_pe1 and cond_pe2 and cond_disc:
             return "🟡 Value watch"
 
-    # 5. 🔵 MOMENTUM TREND
+    # 🔵 MOMENTUM TREND
     if 50 <= rsi <= 70 and (pct_1m is not None and pct_1m > 0):
         return "🔵 Momentum trend"
 
-    # 6. Neutral
     return "⚪ Neutral"
 
 
 def calculate_fair_value_from_eps2(price, eps_plus2, multiple=FAIR_PE_MULTIPLE):
     """
-    Fair Value based on +2y EPS:
-
     Fair Val (+2y) = EPS(+2y) * multiple
     Discount % = (Fair - Price) / Fair * 100
-
-    Positive Discount % = price below fair (undervalued).
-    Negative Discount % = price above fair (overvalued).
     """
     if price is None or eps_plus2 is None or eps_plus2 <= 0:
         return None, None
@@ -142,7 +127,7 @@ def get_ticker_status(symbol: str):
     """
     Returns (mode, price, change, change_pct, arrow).
     """
-    # --------- PATH 1: regularMarket* from get_info() ----------
+    # PATH 1: regularMarket* from get_info()
     try:
         t = yf.Ticker(symbol)
         info = t.get_info() or {}
@@ -172,13 +157,13 @@ def get_ticker_status(symbol: str):
                 arrow = "▼"
             else:
                 mode = "neutral"
-            arrow = "▶" if change == 0 else arrow
+                arrow = "▶"
 
             return mode, price, change, change_pct, arrow
     except Exception:
         pass
 
-    # --------- PATH 2: 2d daily + 1m intraday ----------
+    # PATH 2: 2d daily + 1m intraday
     try:
         t = yf.Ticker(symbol)
 
@@ -722,35 +707,37 @@ def get_stock_summary(tickers):
             except Exception:
                 market_cap = None
 
-            # ---------- FORWARD EPS (+1y, +2y) ----------
+            # ---------- FORWARD EPS (+1y) & APPROX (+2y) ----------
             eps_plus1 = None
             eps_plus2 = None
 
+            forward_eps = None
             try:
-                eps_trend = stock.get_eps_trend()
+                fe = info.get("forwardEps", None)
+                if fe is not None:
+                    forward_eps = float(fe)
             except Exception:
-                eps_trend = None
+                forward_eps = None
 
-            if eps_trend is not None and not eps_trend.empty:
-                if "+1y" in eps_trend.index and "current" in eps_trend.columns:
-                    val1 = eps_trend.loc["+1y", "current"]
-                    if pd.notna(val1):
-                        eps_plus1 = float(val1)
-                if "+2y" in eps_trend.index and "current" in eps_trend.columns:
-                    val2 = eps_trend.loc["+2y", "current"]
-                    if pd.notna(val2):
-                        eps_plus2 = float(val2)
+            if forward_eps is not None and forward_eps > 0:
+                eps_plus1 = forward_eps
 
-            # Fallback for +1y using forwardEps if needed
-            if eps_plus1 is None:
+                # approximate +2y EPS using earningsGrowth or default
+                growth = info.get("earningsGrowth", None)
                 try:
-                    fe = info.get("forwardEps", None)
-                    if fe is not None:
-                        eps_plus1 = float(fe)
+                    if growth is not None:
+                        growth = float(growth)
+                    else:
+                        growth = DEFAULT_GROWTH
                 except Exception:
-                    eps_plus1 = None
+                    growth = DEFAULT_GROWTH
 
-            # Compute forward P/Es
+                # clip growth to avoid insane outliers
+                growth = max(-0.5, min(1.0, growth))
+
+                eps_plus2 = forward_eps * (1.0 + growth)
+
+            # Forward P/Es
             fpe_1y = None
             fpe_2y = None
 
@@ -828,9 +815,29 @@ if not df.empty:
 
     df_display = df_sorted.drop(columns=["Market Cap"], errors="ignore")
 
-    # Combined Price & 1D column right after Ticker
+    # Combined Price & 1D column
     df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
-    df_display = df_display.drop(columns=["Price", "% 1D"])
+
+    # We still need Price and %1D for the Buy-Zone section, so keep them in df,
+    # but not in this visible table.
+    df_display_for_view = df_display.drop(columns=["Price", "% 1D"])
+
+    # Explicit column order for the visible table
+    desired_order = [
+        "Price & 1D",
+        "% 5D",
+        "% 1M",
+        "% from 52w High",
+        "RSI Zone",
+        "Value Signal",
+        "P/E",
+        "Fwd P/E (+1y)",
+        "Fwd P/E (+2y)",
+        "Fair Val (+2y)",
+        "Discount %",
+    ]
+    existing_cols = [c for c in desired_order if c in df_display_for_view.columns]
+    df_display_for_view = df_display_for_view[existing_cols]
 
     format_dict = {
         "Price & 1D": "{}",
@@ -844,29 +851,29 @@ if not df.empty:
         "Discount %": "{:+.1f}%",
     }
 
-    styled = df_display.style.format(format_dict, na_rep="–")
+    styled = df_display_for_view.style.format(format_dict, na_rep="–")
 
-    # Heatmaps for short-term performance
+    # Heatmaps
     pct_cols = ["% 5D", "% 1M"]
     dist_col = "% from 52w High"
 
     for col in pct_cols:
-        if df_display[col].notna().any():
-            vmin = df_display[col].min()
-            vmax = df_display[col].max()
+        if df_display_for_view[col].notna().any():
+            vmin = df_display_for_view[col].min()
+            vmax = df_display_for_view[col].max()
             styled = styled.apply(
                 lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
                 subset=[col],
                 axis=0,
             )
 
-    if df_display[dist_col].notna().any():
-        vmin = df_display[dist_col].min()
+    if df_display_for_view[dist_col].notna().any():
+        vmin = df_display_for_view[dist_col].min()
         vmax = 0.0
         styled = styled.apply(
             lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
-            subset=[dist_col],
-            axis=0,
+                subset=[dist_col],
+                axis=0,
         )
 
     styled = styled.set_table_styles(
@@ -881,7 +888,7 @@ if not df.empty:
     styled = styled.applymap(price_1d_style, subset=["Price & 1D"])
     styled = styled.applymap(discount_style, subset=["Discount %"])
 
-    column_config = build_column_config(df_display.columns)
+    column_config = build_column_config(df_display_for_view.columns)
 
     st.dataframe(
         styled,
@@ -907,7 +914,24 @@ if not df_ndx.empty:
     df_ndx_display = df_ndx.drop(columns=["Market Cap"], errors="ignore")
 
     df_ndx_display["Price & 1D"] = df_ndx_display.apply(format_price_1d, axis=1)
-    df_ndx_display = df_ndx_display.drop(columns=["Price", "% 1D"])
+
+    df_ndx_for_view = df_ndx_display.drop(columns=["Price", "% 1D"])
+
+    desired_order_ndx = [
+        "Price & 1D",
+        "% 5D",
+        "% 1M",
+        "% from 52w High",
+        "RSI Zone",
+        "Value Signal",
+        "P/E",
+        "Fwd P/E (+1y)",
+        "Fwd P/E (+2y)",
+        "Fair Val (+2y)",
+        "Discount %",
+    ]
+    existing_ndx = [c for c in desired_order_ndx if c in df_ndx_for_view.columns]
+    df_ndx_for_view = df_ndx_for_view[existing_ndx]
 
     ndx_format_dict = {
         "Price & 1D": "{}",
@@ -921,23 +945,23 @@ if not df_ndx.empty:
         "Discount %": "{:+.1f}%",
     }
 
-    styled_ndx = df_ndx_display.style.format(ndx_format_dict, na_rep="–")
+    styled_ndx = df_ndx_for_view.style.format(ndx_format_dict, na_rep="–")
 
     ndx_pct_cols = ["% 5D", "% 1M"]
     ndx_dist_col = "% from 52w High"
 
     for col in ndx_pct_cols:
-        if df_ndx_display[col].notna().any():
-            vmin = df_ndx_display[col].min()
-            vmax = df_ndx_display[col].max()
+        if df_ndx_for_view[col].notna().any():
+            vmin = df_ndx_for_view[col].min()
+            vmax = df_ndx_for_view[col].max()
             styled_ndx = styled_ndx.apply(
                 lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
                 subset=[col],
                 axis=0,
             )
 
-    if df_ndx_display[ndx_dist_col].notna().any():
-        vmin = df_ndx_display[ndx_dist_col].min()
+    if df_ndx_for_view[ndx_dist_col].notna().any():
+        vmin = df_ndx_for_view[ndx_dist_col].min()
         vmax = 0.0
         styled_ndx = styled_ndx.apply(
             lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
@@ -957,7 +981,7 @@ if not df_ndx.empty:
     styled_ndx = styled_ndx.applymap(price_1d_style, subset=["Price & 1D"])
     styled_ndx = styled_ndx.applymap(discount_style, subset=["Discount %"])
 
-    ndx_column_config = build_column_config(df_ndx_display.columns)
+    ndx_column_config = build_column_config(df_ndx_for_view.columns)
 
     st.dataframe(
         styled_ndx,
@@ -1065,10 +1089,11 @@ st.markdown(
     f"""
 ### 🧠 Signal Logic & Fair Value
 
-- **Fwd P/E (+1y)** – price divided by analysts' next-year EPS.
-- **Fwd P/E (+2y)** – price divided by analysts' EPS two years out (AI inflection year).
+- **Fwd P/E (+1y)** – price divided by analysts' next-year EPS (`forwardEps`).
+- **Fwd P/E (+2y)** – price divided by an approximate +2y EPS
+  (we take `forwardEps` and grow it once by `earningsGrowth`, or {DEFAULT_GROWTH:.0%} if missing).
 - **Fair Val (+2y)** – EPS(+2y) × {FAIR_PE_MULTIPLE:.0f}, i.e. fair price at a {FAIR_PE_MULTIPLE:.0f}× P/E on 2-year-forward earnings.
-- **Discount %** – how far today's price is below or above that fair value.
+- **Discount %** – (Fair – Price) / Fair × 100:
     - Positive = price below fair (potential value).
     - Negative = price above fair (over fair).
 
