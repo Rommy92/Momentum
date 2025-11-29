@@ -36,9 +36,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# -------------- WATCHLIST ------------------
-
-WATCHLIST = ["NVDA", "TSM", "AMD", "AVGO", "AMKR", "PLTR", "META"]
 
 # -------------- REALTIME TICKER STATUS ------------------
 
@@ -257,6 +254,12 @@ h3, h4 {{
 [data-testid="stDataFrame"] div[role="cell"] {{
     border-bottom: 1px solid #222222 !important;
 }}
+
+/* Make checkbox labels green & bold (Focus Table especially) */
+div.row-widget.stCheckbox label span {{
+    color: #22c55e !important;
+    font-weight: 600 !important;
+}}
 </style>
 """
 st.markdown(cyberpunk_css, unsafe_allow_html=True)
@@ -294,6 +297,7 @@ with st.sidebar:
         index=0,
     )
 
+
 # -------------- TITLE + HEADER ------------------
 
 st.title("Global Tech & Macro Dashboard")
@@ -302,10 +306,6 @@ st.caption(
     unsafe_allow_html=True,
 )
 
-focus_watchlist = st.checkbox(
-    "Focus tables and candidates on my watchlist (NVDA, TSM, AMD, AVGO, AMKR, PLTR, META)",
-    value=False,
-)
 
 # -------------- MACRO / SECTOR / GLOBAL STRIPS ------------------
 
@@ -348,12 +348,17 @@ if price_ssec is None:
 market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
 market_state_map["MARKET"] = get_market_state(active_symbol)
 
+
 st.markdown("### US Macro & Sector Pulse")
 
 
 def render_card(label, ticker_display, status_tuple, market_state: str, show_state: bool):
     """
     Card renderer.
+
+    - Colours label by % move.
+    - If show_state is True and market_state == 'Closed' -> appends red '· Closed'.
+    - Never prints 'Open' anywhere.
     """
     mode, price, _, chg_pct, arrow = status_tuple
     if price is None or chg_pct is None:
@@ -424,6 +429,7 @@ for i in range(0, len(GLOBAL_INDICES), cards_per_row):
                 render_card(label, ticker, status_map[ticker], market_state_map[ticker], True),
                 unsafe_allow_html=True,
             )
+
 
 # -------------- TICKER UNIVERSES ------------------
 
@@ -561,6 +567,10 @@ NASDAQ100_TICKERS = [
     "ZS",
 ]
 
+# Core watchlist for Focus Table
+FOCUS_WATCHLIST = ["NVDA", "TSM", "AMD", "AVGO", "AMKR", "PLTR", "META"]
+
+
 # -------------- HELPERS FOR TABLES ------------------
 
 
@@ -581,58 +591,6 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
         return "🔴 Hot / extended"
 
     return "⚪ Neutral"
-
-
-def value_momentum_score(rsi, pct_from_high, pct_1m, fpe):
-    """
-    Hand-crafted score combining value + momentum.
-    Higher = more attractive risk/reward.
-    """
-    score = 0
-
-    # valuation
-    if fpe is not None:
-        if fpe < 20:
-            score += 3
-        elif fpe < 30:
-            score += 2
-        elif fpe < 40:
-            score += 1
-        elif fpe > 55:
-            score -= 2
-        elif fpe > 45:
-            score -= 1
-
-    # discount from 52w high (negative values)
-    if pct_from_high is not None:
-        if pct_from_high <= -50:
-            score += 3
-        elif pct_from_high <= -35:
-            score += 2
-        elif pct_from_high <= -20:
-            score += 1
-        elif pct_from_high >= -5:
-            score -= 1
-
-    # RSI
-    if rsi is not None:
-        if rsi < 30:
-            score += 2
-        elif rsi < 40:
-            score += 1
-        elif rsi > 70:
-            score -= 2
-        elif rsi > 60:
-            score -= 1
-
-    # 1M performance
-    if pct_1m is not None:
-        if pct_1m > 10:
-            score += 1
-        elif pct_1m < -15:
-            score += 1
-
-    return score
 
 
 def rsi_zone_text(rsi_val: float) -> str:
@@ -662,16 +620,6 @@ def rsi_zone_style(val):
     if rsi < 70:
         return "color: #3b82f6; font-weight: 600;"
     return "color: #ef4444; font-weight: 600;"
-
-
-def vm_score_style(val):
-    if pd.isna(val):
-        return ""
-    if val > 0:
-        return "color: #22c55e; font-weight: 600;"
-    if val < 0:
-        return "color: #ef4444; font-weight: 600;"
-    return "color: #e5e5e5; font-weight: 600;"
 
 
 # base colours for gradients
@@ -809,13 +757,6 @@ def get_stock_summary(tickers):
                 fpe=fpe,
             )
 
-            vm_score = value_momentum_score(
-                rsi=rsi_val,
-                pct_from_high=pct_from_52wk,
-                pct_1m=pct_1m,
-                fpe=fpe,
-            )
-
             rows.append(
                 {
                     "Ticker": ticker,
@@ -826,7 +767,6 @@ def get_stock_summary(tickers):
                     "% from 52w High": pct_from_52wk,
                     "RSI Zone": rsi_zone_str,
                     "Value Signal": value_signal,
-                    "VM Score": vm_score,
                     "P/E": pe,
                     "Fwd P/E": fpe,
                     "Market Cap": market_cap,
@@ -850,7 +790,6 @@ BASE_COLUMN_CONFIG = {
         "% from 52w High",
         "RSI Zone",
         "Value Signal",
-        "VM Score",
         "P/E",
         "Fwd P/E",
     ]
@@ -891,6 +830,12 @@ def pct1d_style(val):
 
 # Style for combined "Price & 1D" column
 def price_1d_style(val):
+    """
+    Style for 'Price & 1D' column:
+    - green if 1D % > 0
+    - red if 1D % < 0
+    - grey otherwise
+    """
     if val is None or val == "–":
         return ""
     try:
@@ -923,25 +868,37 @@ df_ndx = pd.DataFrame()
 st.markdown("---")
 st.markdown("## Megacap & Core")
 
+# Centered Focus Table checkbox
+c1, c2, c3 = st.columns([1, 1, 1])
+with c2:
+    focus_only = st.checkbox(
+        "Focus Table",
+        value=False,
+        help="Show only: NVDA, TSM, AMD, AVGO, AMKR, PLTR, META.",
+    )
+
 with st.spinner("📡 Fetching data for Tech leadership table..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
 if not df.empty:
     df = df.set_index("Ticker")
 
+    # Apply Focus filter if enabled
+    if focus_only:
+        df = df[df.index.isin(FOCUS_WATCHLIST)]
+
     if "Market Cap" in df.columns:
         df_sorted = df.sort_values("Market Cap", ascending=False)
     else:
         df_sorted = df.copy()
 
-    if focus_watchlist:
-        df_sorted = df_sorted[df_sorted.index.isin(WATCHLIST)]
-
     df_display = df_sorted.drop(columns=["Market Cap"], errors="ignore")
 
+    # combined column
     df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
     df_display = df_display.drop(columns=["Price", "% 1D"])
 
+    # REORDER: move Price & 1D next to Ticker (first data column)
     desired_order = [
         "Price & 1D",
         "% 5D",
@@ -949,7 +906,6 @@ if not df.empty:
         "% from 52w High",
         "RSI Zone",
         "Value Signal",
-        "VM Score",
         "P/E",
         "Fwd P/E",
     ]
@@ -961,7 +917,6 @@ if not df.empty:
         "% 5D": "{:.1f}%",
         "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
-        "VM Score": "{:+.0f}",
         "P/E": "{:.1f}",
         "Fwd P/E": "{:.1f}",
     }
@@ -1000,8 +955,6 @@ if not df.empty:
 
     styled = styled.applymap(rsi_zone_style, subset=["RSI Zone"])
     styled = styled.applymap(price_1d_style, subset=["Price & 1D"])
-    if "VM Score" in df_display.columns:
-        styled = styled.applymap(vm_score_style, subset=["VM Score"])
 
     column_config = build_column_config(df_display.columns)
 
@@ -1013,6 +966,7 @@ if not df.empty:
     )
 else:
     st.write("No data loaded.")
+
 
 # -------------- TABLE 2: NASDAQ-100 DEEP DRAWDOWN ------------------
 
@@ -1027,16 +981,19 @@ with st.spinner("📡 Fetching Nasdaq-100 data..."):
 
 if not df_ndx.empty:
     df_ndx = df_ndx.set_index("Ticker")
+
+    # Apply Focus filter here too
+    if focus_only:
+        df_ndx = df_ndx[df_ndx.index.isin(FOCUS_WATCHLIST)]
+
     df_ndx = df_ndx.sort_values("% from 52w High")
-
-    if focus_watchlist:
-        df_ndx = df_ndx[df_ndx.index.isin(WATCHLIST)]
-
     df_ndx_display = df_ndx.drop(columns=["Market Cap"], errors="ignore")
 
+    # combined column for Nasdaq table
     df_ndx_display["Price & 1D"] = df_ndx_display.apply(format_price_1d, axis=1)
     df_ndx_display = df_ndx_display.drop(columns=["Price", "% 1D"])
 
+    # REORDER: Price & 1D first
     desired_order_ndx = [
         "Price & 1D",
         "% 5D",
@@ -1044,7 +1001,6 @@ if not df_ndx.empty:
         "% from 52w High",
         "RSI Zone",
         "Value Signal",
-        "VM Score",
         "P/E",
         "Fwd P/E",
     ]
@@ -1056,7 +1012,6 @@ if not df_ndx.empty:
         "% 5D": "{:.1f}%",
         "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
-        "VM Score": "{:+.0f}",
         "P/E": "{:.1f}",
         "Fwd P/E": "{:.1f}",
     }
@@ -1095,8 +1050,6 @@ if not df_ndx.empty:
 
     styled_ndx = styled_ndx.applymap(rsi_zone_style, subset=["RSI Zone"])
     styled_ndx = styled_ndx.applymap(price_1d_style, subset=["Price & 1D"])
-    if "VM Score" in df_ndx_display.columns:
-        styled_ndx = styled_ndx.applymap(vm_score_style, subset=["VM Score"])
 
     ndx_column_config = build_column_config(df_ndx_display.columns)
 
@@ -1109,13 +1062,14 @@ if not df_ndx.empty:
 else:
     st.write("No Nasdaq-100 data loaded.")
 
-# -------------- BUY-ZONE CANDIDATES + PLAYBOOK ------------------
+
+# -------------- BUY-ZONE CANDIDATES ------------------
 
 st.markdown("---")
 st.markdown("## Buy-Zone Candidates (Screened by Your Rules)")
 
 
-def build_buy_candidates(df_tech, df_nasdaq, focus_watchlist: bool = False):
+def build_buy_candidates(df_tech, df_nasdaq):
     sources = []
     if buy_universe in ("Tech leaders only", "Both") and df_tech is not None and not df_tech.empty:
         sources.append(df_tech.copy())
@@ -1128,8 +1082,9 @@ def build_buy_candidates(df_tech, df_nasdaq, focus_watchlist: bool = False):
     base = pd.concat(sources, axis=0)
     base = base[~base.index.duplicated(keep="first")]
 
-    if focus_watchlist:
-        base = base[base.index.isin(WATCHLIST)]
+    # Apply Focus filter here too
+    if focus_only:
+        base = base[base.index.isin(FOCUS_WATCHLIST)]
 
     rsi_numeric = base["RSI Zone"].str.extract(r"([\d.]+)").astype(float)[0]
     base["RSI_numeric"] = rsi_numeric
@@ -1150,52 +1105,17 @@ def build_buy_candidates(df_tech, df_nasdaq, focus_watchlist: bool = False):
     if candidates.empty:
         return candidates
 
-    candidates = candidates.sort_values(
-        ["VM Score", "% from 52w High"], ascending=[False, True]
-    )
+    candidates = candidates.sort_values("% from 52w High")
     return candidates
 
 
-def build_playbook_text(df_cand, top_n: int = 5) -> str:
-    if df_cand is None or df_cand.empty:
-        return "No names currently match your buy-zone filters right now."
-
-    lines = []
-    lines.append("**Today’s best risk/reward setups (by your filters):**")
-
-    subset = df_cand.head(top_n)
-    for ticker, row in subset.iterrows():
-        try:
-            rsi_num = float(str(row["RSI Zone"]).split()[0])
-        except Exception:
-            rsi_num = None
-
-        parts = [
-            f"**{ticker}**",
-            f"{row['% from 52w High']:.1f}% from 52w high",
-        ]
-        if pd.notna(row.get("Fwd P/E")):
-            parts.append(f"Fwd P/E {row['Fwd P/E']:.1f}")
-        if pd.notna(row.get("VM Score")):
-            parts.append(f"Score {row['VM Score']:+.0f}")
-        if rsi_num is not None:
-            parts.append(f"RSI {rsi_num:.1f}")
-
-        lines.append("- " + ", ".join(parts))
-
-    return "\n".join(lines)
-
-
 if df is not None and df_ndx is not None:
-    candidates = build_buy_candidates(df, df_ndx, focus_watchlist=focus_watchlist)
+    candidates = build_buy_candidates(df, df_ndx)
 else:
     candidates = pd.DataFrame()
 
-st.markdown("### Daily Playbook")
-st.markdown(build_playbook_text(candidates))
-
 if not candidates.empty:
-    show_cols = ["Price", "% 1D", "% from 52w High", "RSI Zone", "Fwd P/E", "VM Score", "Value Signal"]
+    show_cols = ["Price", "% 1D", "% from 52w High", "RSI Zone", "Fwd P/E", "Value Signal"]
     candidates_display = candidates[show_cols]
 
     cand_format = {
@@ -1203,7 +1123,6 @@ if not candidates.empty:
         "% 1D": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
         "Fwd P/E": "{:.1f}",
-        "VM Score": "{:+.0f}",
     }
 
     cand_styled = candidates_display.style.format(cand_format, na_rep="–")
@@ -1217,26 +1136,18 @@ if not candidates.empty:
     cand_styled = cand_styled.applymap(rsi_zone_style, subset=["RSI Zone"])
     cand_styled = cand_styled.apply(lambda row: price_style(row), subset=["Price"], axis=1)
     cand_styled = cand_styled.applymap(pct1d_style, subset=["% 1D"])
-    cand_styled = cand_styled.applymap(vm_score_style, subset=["VM Score"])
 
     st.dataframe(
         cand_styled,
         use_container_width=True,
         height=400,
     )
-
-    csv = candidates_display.to_csv().encode("utf-8")
-    st.download_button(
-        label="⬇️ Download candidates as CSV",
-        data=csv,
-        file_name="buy_zone_candidates.csv",
-        mime="text/csv",
-    )
 else:
     st.write(
         "No tickers currently match your buy-zone criteria. "
         "Loosen filters in the sidebar to widen the search."
     )
+
 
 # -------------- HOW TO READ THE SIGNALS ------------------
 
