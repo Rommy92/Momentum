@@ -36,6 +36,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 # -------------- REALTIME TICKER STATUS ------------------
 
 
@@ -177,6 +178,7 @@ else:
     active_change_pct = fut_change_pct
     active_arrow = fut_arrow
 
+
 # Accent color based on ACTIVE driver
 if active_mode == "green":
     accent = "#76B900"
@@ -184,6 +186,7 @@ elif active_mode == "red":
     accent = "#ef4444"
 else:
     accent = "#0ea5e9"
+
 
 # -------------- CYBERPUNK CSS ------------------
 
@@ -255,6 +258,7 @@ h3, h4 {{
 """
 st.markdown(cyberpunk_css, unsafe_allow_html=True)
 
+
 # -------------- SIDEBAR: BUY-ZONE FILTER CONTROLS ------------------
 
 with st.sidebar:
@@ -287,6 +291,7 @@ with st.sidebar:
         index=0,
     )
 
+
 # -------------- TITLE + HEADER ------------------
 
 st.title("Global Tech & Macro Dashboard")
@@ -294,6 +299,7 @@ st.caption(
     f"<p style='text-align:center;'>Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
     unsafe_allow_html=True,
 )
+
 
 # -------------- MACRO / SECTOR / GLOBAL STRIPS ------------------
 
@@ -335,6 +341,7 @@ if price_ssec is None:
 
 market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
 market_state_map["MARKET"] = get_market_state(active_symbol)
+
 
 st.markdown("### US Macro & Sector Pulse")
 
@@ -416,6 +423,7 @@ for i in range(0, len(GLOBAL_INDICES), cards_per_row):
                 render_card(label, ticker, status_map[ticker], market_state_map[ticker], True),
                 unsafe_allow_html=True,
             )
+
 
 # -------------- TICKER UNIVERSES ------------------
 
@@ -555,82 +563,91 @@ NASDAQ100_TICKERS = [
 
 FOCUS_TICKERS = ["NVDA", "TSM", "AMD", "AVGO", "AMKR", "PLTR", "META"]
 
+
 # -------------- HELPERS FOR TABLES ------------------
 
-
 def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
+    """
+    Text/emoji signal (for humans).
+    Logic is aligned with the VM score but separate.
+    """
     if rsi is None or pct_from_high is None:
         return "❔ Check data"
 
-    if rsi < 35 and pct_from_high <= -30 and (fpe is None or fpe <= 30):
+    # Deep value
+    if (rsi < 35) and (pct_from_high <= -30) and (fpe is None or fpe <= 30):
         return "💚 Deep value pullback"
 
-    if rsi < 50 and pct_from_high <= -15 and (fpe is None or fpe <= 35):
+    # Value watch
+    if (rsi < 50) and (pct_from_high <= -15) and (fpe is None or fpe <= 35):
         return "🟡 Value watch"
 
-    if 50 <= rsi <= 70 and (pct_1m is not None and pct_1m > 0):
+    # Momentum trend
+    if (50 <= rsi <= 70) and (pct_1m is not None and pct_1m > 0):
         return "🔵 Momentum trend"
 
-    if rsi > 70 or (pct_from_high >= -5 and (fpe is not None and fpe >= 45)):
+    # Hot / extended
+    if (rsi > 70) or (pct_from_high >= -5 and (fpe is not None and fpe >= 45)):
         return "🔴 Hot / extended"
 
     return "⚪ Neutral"
 
 
-def compute_vm_score(rsi, pct_from_high, pct_1m, fpe) -> int:
+def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
     """
-    Composite Value + Momentum score in range 0–8.
-
-    Value side (0–4):
-      - Cheap vs earnings (Fwd P/E)
-      - Drawdown vs 52w high
-
-    Momentum side (0–4):
-      - 1M price action
-      - RSI zone, with penalty if overbought + near highs
+    Numeric VM score 0–8 combining:
+      - Value (forward P/E)
+      - Drawdown depth
+      - Momentum health
+      - Hot penalty
     """
-    if rsi is None or pct_from_high is None:
-        return 0
 
-    # ---------- VALUE COMPONENT (0–4) ----------
-    value_score = 0
-
-    # Fwd P/E contribution (0–2)
-    if fpe is not None:
+    # Value points
+    val_points = 0
+    if fpe is None:
+        val_points = 1  # neutral if we don't know
+    else:
         if fpe <= 20:
-            value_score += 2
+            val_points = 3
         elif fpe <= 30:
-            value_score += 1
+            val_points = 2
+        elif fpe <= 40:
+            val_points = 1
+        else:
+            val_points = 0
 
-    # Drawdown contribution (0–2)
-    if pct_from_high <= -40:
-        value_score += 2
-    elif pct_from_high <= -25:
-        value_score += 1
+    # Drawdown points
+    dd_points = 0
+    if pct_from_high is not None:
+        if pct_from_high <= -40:
+            dd_points = 3
+        elif pct_from_high <= -30:
+            dd_points = 2
+        elif pct_from_high <= -20:
+            dd_points = 1
 
-    # ---------- MOMENTUM COMPONENT (0–4) ----------
-    momentum_score = 0
+    # Momentum points (trend health, not chase)
+    mom_points = 0
+    if rsi is not None and 40 <= rsi <= 60:
+        mom_points += 1
+    if pct_1m is not None and pct_1m > 0:
+        mom_points += 1
+    mom_points = min(mom_points, 2)
 
-    # 1M performance contribution (0–2)
-    if pct_1m is not None:
-        if pct_1m >= 20:
-            momentum_score += 2
-        elif pct_1m >= 5:
-            momentum_score += 1
+    score = val_points + dd_points + mom_points
 
-    # RSI zone contribution (0–2)
-    if 40 <= rsi <= 60:
-        momentum_score += 2  # healthy trend, not stretched
-    elif 30 <= rsi < 40 or 60 < rsi <= 70:
-        momentum_score += 1  # ok but not perfect
+    # Hot penalty
+    hot = False
+    if rsi is not None and rsi >= 70:
+        hot = True
+    if pct_from_high is not None and pct_from_high >= -5 and fpe is not None and fpe >= 35:
+        hot = True
 
-    score = value_score + momentum_score
+    if hot:
+        score -= 3
 
-    # ---------- HOT/EXTENDED PENALTY ----------
-    if (pct_from_high >= -5) and (fpe is not None and fpe >= 45) and (rsi >= 70):
-        score = max(0, score - 3)
-
-    return int(score)
+    score = max(0, min(8, score))
+    return score
 
 
 def rsi_zone_text(rsi_val: float) -> str:
@@ -661,27 +678,6 @@ def rsi_zone_style(val):
         return "color: #3b82f6; font-weight: 600;"
     return "color: #ef4444; font-weight: 600;"
 
-
-def vm_signal_style(val):
-    """
-    Colour VM Signal based on the numeric VM score at the start of the string.
-    Example value: "7 – 💚 Deep value pullback"
-    """
-    if val is None:
-        return ""
-    try:
-        score_str = str(val).split("–")[0].strip()
-        score = int(score_str)
-    except Exception:
-        return ""
-
-    if score >= 6:
-        return "color: #22c55e; font-weight: 700;"      # strong setup
-    if score >= 3:
-        return "color: #eab308; font-weight: 600;"      # decent
-    if score >= 1:
-        return "color: #3b82f6; font-weight: 500;"      # ok / neutral+
-    return "color: #ef4444; font-weight: 600;"          # weak / avoid
 
 # base colours for gradients
 RED = (239, 68, 68)
@@ -779,6 +775,7 @@ def get_stock_summary(tickers):
             except Exception:
                 market_cap = None
 
+            # Forward EPS / Fwd P/E
             fpe = None
             forward_eps = None
             try:
@@ -818,14 +815,14 @@ def get_stock_summary(tickers):
                 fpe=fpe,
             )
 
-            vm_score = compute_vm_score(
+            vm_score_raw = compute_vm_score(
                 rsi=rsi_val,
                 pct_from_high=pct_from_52wk,
                 pct_1m=pct_1m,
                 fpe=fpe,
             )
 
-            vm_signal = f"{vm_score} – {value_signal}"
+            vm_score_display = f"{vm_score_raw} – {value_signal}"
 
             rows.append(
                 {
@@ -836,9 +833,9 @@ def get_stock_summary(tickers):
                     "% 1M": pct_1m,
                     "% from 52w High": pct_from_52wk,
                     "RSI Zone": rsi_zone_str,
-                    "Value Signal": value_signal,  # internal use (filters)
-                    "VM Score": vm_score,          # internal / sorting
-                    "VM Signal": vm_signal,        # display column
+                    "Value Signal": value_signal,
+                    "VM Score Raw": vm_score_raw,
+                    "VM Score": vm_score_display,
                     "P/E": pe,
                     "Fwd P/E": fpe,
                     "Market Cap": market_cap,
@@ -851,17 +848,18 @@ def get_stock_summary(tickers):
     return pd.DataFrame(rows)
 
 
+# Column config, including VM Score
 BASE_COLUMN_CONFIG = {
     col: st.column_config.Column(width="fit")
     for col in [
-        "Price",
-        "Price & 1D",
+        "Price",        # still used in Buy-Zone section
+        "Price & 1D",   # combined column for main tables
         "% 1D",
         "% 5D",
         "% 1M",
         "% from 52w High",
         "RSI Zone",
-        "VM Signal",
+        "VM Score",
         "P/E",
         "Fwd P/E",
     ]
@@ -882,7 +880,7 @@ def build_column_config(columns):
 def price_style(row):
     val = row.get("% 1D", None)
     if pd.isna(val):
-        return [""]
+        return [""]  # no style
     if val > 0:
         return ["color: #22c55e; font-weight: 600;"]
     if val < 0:
@@ -902,9 +900,16 @@ def pct1d_style(val):
 
 # Style for combined "Price & 1D" column
 def price_1d_style(val):
+    """
+    Style for 'Price & 1D' column:
+    - green if 1D % > 0
+    - red if 1D % < 0
+    - grey otherwise
+    """
     if val is None or val == "–":
         return ""
     try:
+        # "$180.62 (+1.4%)"
         inside = val.split("(")[1].split("%")[0]
         pct = float(inside)
     except Exception:
@@ -926,6 +931,45 @@ def format_price_1d(row):
     return f"${price:,.2f} ({pct_1d:+.1f}%)"
 
 
+def vm_score_style(val):
+    """
+    Style VM Score column based on score + emoji.
+    """
+    if val is None or val == "–":
+        return ""
+    txt = str(val)
+
+    # Try to extract numeric score at start
+    score = None
+    try:
+        first_part = txt.split("–")[0].strip()
+        score = int(first_part)
+    except Exception:
+        score = None
+
+    # Emoji-based override
+    if "💚" in txt:
+        return "color: #22c55e; font-weight: 800;"
+    if "🟡" in txt:
+        return "color: #eab308; font-weight: 700;"
+    if "🔵" in txt:
+        return "color: #3b82f6; font-weight: 700;"
+    if "🔴" in txt:
+        return "color: #ef4444; font-weight: 700;"
+
+    # Fallback to numeric
+    if score is not None:
+        if score >= 6:
+            return "color: #22c55e; font-weight: 800;"
+        if score >= 4:
+            return "color: #eab308; font-weight: 700;"
+        if score >= 2:
+            return "color: #3b82f6; font-weight: 600;"
+        return "color: #9ca3af; font-weight: 500;"
+
+    return ""
+
+
 # -------------- TABLE 1: TECH LEADERSHIP ------------------
 
 df = pd.DataFrame()
@@ -934,12 +978,15 @@ df_ndx = pd.DataFrame()
 st.markdown("---")
 st.markdown("## Megacap & Core")
 
-focus_only = st.checkbox(
-    "Focus Table",
-    value=False,
-    help="Limit all tables to your core watchlist: NVDA, TSM, AMD, AVGO, AMKR, PLTR, META.",
-    key="focus_table",
-)
+# Centered Focus Table toggle, green label
+focus_cols = st.columns([1, 1, 1])
+with focus_cols[1]:
+    st.markdown(
+        f"<p style='text-align:center; color:{accent}; font-weight:700; margin-bottom:0.25rem;'>Focus Table</p>",
+        unsafe_allow_html=True,
+    )
+    focus_mode = st.checkbox(" ", key="focus_mode", label_visibility="collapsed")
+
 
 with st.spinner("📡 Fetching data for Tech leadership table..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
@@ -947,7 +994,8 @@ with st.spinner("📡 Fetching data for Tech leadership table..."):
 if not df.empty:
     df = df.set_index("Ticker")
 
-    if focus_only:
+    # Apply focus universe if enabled
+    if focus_mode:
         df = df.loc[df.index.intersection(FOCUS_TICKERS)]
 
     if "Market Cap" in df.columns:
@@ -955,19 +1003,20 @@ if not df.empty:
     else:
         df_sorted = df.copy()
 
-    df_display = df_sorted.drop(columns=["Market Cap", "Value Signal", "VM Score"], errors="ignore")
+    df_display = df_sorted.drop(columns=["Market Cap", "VM Score Raw"], errors="ignore")
 
-    # Combined Price & 1D
+    # combined Price & 1D
     df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
-    df_display = df_display.drop(columns=["Price", "% 1D"])
+    df_display = df_display.drop(columns=["Price", "% 1D"], errors="ignore")
 
+    # REORDER: Price & 1D first, then VM Score etc.
     desired_order = [
         "Price & 1D",
         "% 5D",
         "% 1M",
         "% from 52w High",
         "RSI Zone",
-        "VM Signal",
+        "VM Score",
         "P/E",
         "Fwd P/E",
     ]
@@ -1017,7 +1066,7 @@ if not df.empty:
 
     styled = styled.applymap(rsi_zone_style, subset=["RSI Zone"])
     styled = styled.applymap(price_1d_style, subset=["Price & 1D"])
-    styled = styled.applymap(vm_signal_style, subset=["VM Signal"])
+    styled = styled.applymap(vm_score_style, subset=["VM Score"])
 
     column_config = build_column_config(df_display.columns)
 
@@ -1029,6 +1078,7 @@ if not df.empty:
     )
 else:
     st.write("No data loaded.")
+
 
 # -------------- TABLE 2: NASDAQ-100 DEEP DRAWDOWN ------------------
 
@@ -1044,22 +1094,25 @@ with st.spinner("📡 Fetching Nasdaq-100 data..."):
 if not df_ndx.empty:
     df_ndx = df_ndx.set_index("Ticker")
 
-    if focus_only:
+    # Focus universe here as well
+    if focus_mode:
         df_ndx = df_ndx.loc[df_ndx.index.intersection(FOCUS_TICKERS)]
 
     df_ndx = df_ndx.sort_values("% from 52w High")
-    df_ndx_display = df_ndx.drop(columns=["Market Cap", "Value Signal", "VM Score"], errors="ignore")
+    df_ndx_display = df_ndx.drop(columns=["Market Cap", "VM Score Raw"], errors="ignore")
 
+    # combined column for Nasdaq table
     df_ndx_display["Price & 1D"] = df_ndx_display.apply(format_price_1d, axis=1)
-    df_ndx_display = df_ndx_display.drop(columns=["Price", "% 1D"])
+    df_ndx_display = df_ndx_display.drop(columns=["Price", "% 1D"], errors="ignore")
 
+    # REORDER: Price & 1D first
     desired_order_ndx = [
         "Price & 1D",
         "% 5D",
         "% 1M",
         "% from 52w High",
         "RSI Zone",
-        "VM Signal",
+        "VM Score",
         "P/E",
         "Fwd P/E",
     ]
@@ -1109,7 +1162,7 @@ if not df_ndx.empty:
 
     styled_ndx = styled_ndx.applymap(rsi_zone_style, subset=["RSI Zone"])
     styled_ndx = styled_ndx.applymap(price_1d_style, subset=["Price & 1D"])
-    styled_ndx = styled_ndx.applymap(vm_signal_style, subset=["VM Signal"])
+    styled_ndx = styled_ndx.applymap(vm_score_style, subset=["VM Score"])
 
     ndx_column_config = build_column_config(df_ndx_display.columns)
 
@@ -1121,6 +1174,7 @@ if not df_ndx.empty:
     )
 else:
     st.write("No Nasdaq-100 data loaded.")
+
 
 # -------------- BUY-ZONE CANDIDATES ------------------
 
@@ -1141,7 +1195,8 @@ def build_buy_candidates(df_tech, df_nasdaq):
     base = pd.concat(sources, axis=0)
     base = base[~base.index.duplicated(keep="first")]
 
-    if focus_only:
+    # Focus universe here too
+    if focus_mode:
         base = base.loc[base.index.intersection(FOCUS_TICKERS)]
 
     rsi_numeric = base["RSI Zone"].str.extract(r"([\d.]+)").astype(float)[0]
@@ -1163,7 +1218,12 @@ def build_buy_candidates(df_tech, df_nasdaq):
     if candidates.empty:
         return candidates
 
-    candidates = candidates.sort_values("% from 52w High")
+    # Prefer higher VM Score Raw, then deeper drawdown
+    if "VM Score Raw" in candidates.columns:
+        candidates = candidates.sort_values(["VM Score Raw", "% from 52w High"], ascending=[False, True])
+    else:
+        candidates = candidates.sort_values("% from 52w High")
+
     return candidates
 
 
@@ -1173,7 +1233,17 @@ else:
     candidates = pd.DataFrame()
 
 if not candidates.empty:
-    show_cols = ["Price", "% 1D", "% from 52w High", "RSI Zone", "Fwd P/E", "VM Signal"]
+    # Build Price & 1D combined for candidates as well (for visual consistency if needed)
+    candidates["Price & 1D"] = candidates.apply(format_price_1d, axis=1)
+
+    show_cols = [
+        "Price",
+        "% 1D",
+        "% from 52w High",
+        "RSI Zone",
+        "Fwd P/E",
+        "VM Score",
+    ]
     candidates_display = candidates[show_cols]
 
     cand_format = {
@@ -1194,7 +1264,7 @@ if not candidates.empty:
     cand_styled = cand_styled.applymap(rsi_zone_style, subset=["RSI Zone"])
     cand_styled = cand_styled.apply(lambda row: price_style(row), subset=["Price"], axis=1)
     cand_styled = cand_styled.applymap(pct1d_style, subset=["% 1D"])
-    cand_styled = cand_styled.applymap(vm_signal_style, subset=["VM Signal"])
+    cand_styled = cand_styled.applymap(vm_score_style, subset=["VM Score"])
 
     st.dataframe(
         cand_styled,
@@ -1207,15 +1277,16 @@ else:
         "Loosen filters in the sidebar to widen the search."
     )
 
+
 # -------------- HOW TO READ THE SIGNALS ------------------
 
 st.markdown("---")
 st.markdown(
     """
-**Value / Momentum Signal (VM Signal)**  
-- Score is **0–8** on the left (higher = better risk/reward).  
-- Text / emoji on the right explains *why*:
+**VM Score (0–8) – combined value + drawdown + momentum, with hot penalty**  
+- Higher score = better blend of: **cheap / beaten-up / healthy trend / not overheated**.  
 
+**Value Signal (inside VM column)**  
 - 💚 **Deep value pullback** – Big drawdown vs 52-week high, low or reasonable forward P/E, weak RSI.  
 - 🟡 **Value watch** – Decent pullback, valuation reasonable but not screaming.  
 - 🔵 **Momentum trend** – Positive 1-month performance with RSI in 50–70 zone.  
