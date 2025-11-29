@@ -453,6 +453,7 @@ TOP_TECH_TICKERS = [
     "AMKR",
     "SMCI",
     "AXON",
+    "SYM",
     "ISRG",
 ]
 
