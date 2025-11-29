@@ -36,6 +36,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Watchlist universe
+WATCHLIST_TICKERS = ["NVDA", "TSM", "AMD", "AVGO", "AMKR", "PLTR", "META"]
+
 
 # -------------- REALTIME TICKER STATUS ------------------
 
@@ -253,12 +256,6 @@ h3, h4 {{
 
 [data-testid="stDataFrame"] div[role="cell"] {{
     border-bottom: 1px solid #222222 !important;
-}}
-
-/* Make checkbox labels green & bold (Focus Table especially) */
-div.row-widget.stCheckbox label span {{
-    color: #22c55e !important;
-    font-weight: 600 !important;
 }}
 </style>
 """
@@ -567,9 +564,6 @@ NASDAQ100_TICKERS = [
     "ZS",
 ]
 
-# Core watchlist for Focus Table
-FOCUS_WATCHLIST = ["NVDA", "TSM", "AMD", "AVGO", "AMKR", "PLTR", "META"]
-
 
 # -------------- HELPERS FOR TABLES ------------------
 
@@ -591,6 +585,23 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
         return "🔴 Hot / extended"
 
     return "⚪ Neutral"
+
+
+def value_signal_score(sig: str) -> int:
+    """
+    Convert value signal into numeric VM score.
+    """
+    if not isinstance(sig, str):
+        return 0
+    if "Deep value pullback" in sig:
+        return 3
+    if "Value watch" in sig:
+        return 2
+    if "Momentum trend" in sig:
+        return 1
+    if "Hot / extended" in sig:
+        return -1
+    return 0
 
 
 def rsi_zone_text(rsi_val: float) -> str:
@@ -757,6 +768,8 @@ def get_stock_summary(tickers):
                 fpe=fpe,
             )
 
+            vm_score = value_signal_score(value_signal)
+
             rows.append(
                 {
                     "Ticker": ticker,
@@ -767,6 +780,7 @@ def get_stock_summary(tickers):
                     "% from 52w High": pct_from_52wk,
                     "RSI Zone": rsi_zone_str,
                     "Value Signal": value_signal,
+                    "VM Score": vm_score,
                     "P/E": pe,
                     "Fwd P/E": fpe,
                     "Market Cap": market_cap,
@@ -782,14 +796,15 @@ def get_stock_summary(tickers):
 BASE_COLUMN_CONFIG = {
     col: st.column_config.Column(width="fit")
     for col in [
-        "Price",        # still used in Buy-Zone section
-        "Price & 1D",   # combined column for main tables
+        "Price",        # for internal / buy-zone if needed
+        "Price & 1D",
         "% 1D",
         "% 5D",
         "% 1M",
         "% from 52w High",
         "RSI Zone",
         "Value Signal",
+        "VM Score",
         "P/E",
         "Fwd P/E",
     ]
@@ -806,7 +821,7 @@ def build_column_config(columns):
     return cfg
 
 
-# styling for separate Price/%1D (used in Buy-Zone candidates)
+# styling for separate Price/%1D (legacy, still used in buy-zone logic if needed)
 def price_style(row):
     val = row.get("% 1D", None)
     if pd.isna(val):
@@ -868,14 +883,22 @@ df_ndx = pd.DataFrame()
 st.markdown("---")
 st.markdown("## Megacap & Core")
 
-# Centered Focus Table checkbox
+# Centered Focus Table toggle under heading
+focus_css = f"""
+<style>
+label[for="focus_table"] {{
+    color: {accent} !important;
+    font-weight: 700 !important;
+}}
+</style>
+"""
+st.markdown(focus_css, unsafe_allow_html=True)
+
 c1, c2, c3 = st.columns([1, 1, 1])
 with c2:
-    focus_only = st.checkbox(
-        "Focus Table",
-        value=False,
-        help="Show only: NVDA, TSM, AMD, AVGO, AMKR, PLTR, META.",
-    )
+    focus_only = st.checkbox("Focus Table", key="focus_table", value=False)
+
+st.write("")  # small spacer
 
 with st.spinner("📡 Fetching data for Tech leadership table..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
@@ -883,14 +906,13 @@ with st.spinner("📡 Fetching data for Tech leadership table..."):
 if not df.empty:
     df = df.set_index("Ticker")
 
-    # Apply Focus filter if enabled
-    if focus_only:
-        df = df[df.index.isin(FOCUS_WATCHLIST)]
-
     if "Market Cap" in df.columns:
         df_sorted = df.sort_values("Market Cap", ascending=False)
     else:
         df_sorted = df.copy()
+
+    if focus_only:
+        df_sorted = df_sorted.loc[df_sorted.index.intersection(WATCHLIST_TICKERS)]
 
     df_display = df_sorted.drop(columns=["Market Cap"], errors="ignore")
 
@@ -898,7 +920,6 @@ if not df.empty:
     df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
     df_display = df_display.drop(columns=["Price", "% 1D"])
 
-    # REORDER: move Price & 1D next to Ticker (first data column)
     desired_order = [
         "Price & 1D",
         "% 5D",
@@ -906,6 +927,7 @@ if not df.empty:
         "% from 52w High",
         "RSI Zone",
         "Value Signal",
+        "VM Score",
         "P/E",
         "Fwd P/E",
     ]
@@ -917,6 +939,7 @@ if not df.empty:
         "% 5D": "{:.1f}%",
         "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
+        "VM Score": "{:d}",
         "P/E": "{:.1f}",
         "Fwd P/E": "{:.1f}",
     }
@@ -981,19 +1004,16 @@ with st.spinner("📡 Fetching Nasdaq-100 data..."):
 
 if not df_ndx.empty:
     df_ndx = df_ndx.set_index("Ticker")
-
-    # Apply Focus filter here too
-    if focus_only:
-        df_ndx = df_ndx[df_ndx.index.isin(FOCUS_WATCHLIST)]
-
     df_ndx = df_ndx.sort_values("% from 52w High")
+
+    if focus_only:
+        df_ndx = df_ndx.loc[df_ndx.index.intersection(WATCHLIST_TICKERS)]
+
     df_ndx_display = df_ndx.drop(columns=["Market Cap"], errors="ignore")
 
-    # combined column for Nasdaq table
     df_ndx_display["Price & 1D"] = df_ndx_display.apply(format_price_1d, axis=1)
     df_ndx_display = df_ndx_display.drop(columns=["Price", "% 1D"])
 
-    # REORDER: Price & 1D first
     desired_order_ndx = [
         "Price & 1D",
         "% 5D",
@@ -1001,6 +1021,7 @@ if not df_ndx.empty:
         "% from 52w High",
         "RSI Zone",
         "Value Signal",
+        "VM Score",
         "P/E",
         "Fwd P/E",
     ]
@@ -1012,6 +1033,7 @@ if not df_ndx.empty:
         "% 5D": "{:.1f}%",
         "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
+        "VM Score": "{:d}",
         "P/E": "{:.1f}",
         "Fwd P/E": "{:.1f}",
     }
@@ -1082,12 +1104,11 @@ def build_buy_candidates(df_tech, df_nasdaq):
     base = pd.concat(sources, axis=0)
     base = base[~base.index.duplicated(keep="first")]
 
-    # Apply Focus filter here too
-    if focus_only:
-        base = base[base.index.isin(FOCUS_WATCHLIST)]
-
     rsi_numeric = base["RSI Zone"].str.extract(r"([\d.]+)").astype(float)[0]
     base["RSI_numeric"] = rsi_numeric
+
+    if focus_only:
+        base = base.loc[base.index.intersection(WATCHLIST_TICKERS)]
 
     mask = pd.Series(True, index=base.index)
 
@@ -1115,13 +1136,29 @@ else:
     candidates = pd.DataFrame()
 
 if not candidates.empty:
-    show_cols = ["Price", "% 1D", "% from 52w High", "RSI Zone", "Fwd P/E", "Value Signal"]
-    candidates_display = candidates[show_cols]
+    # Create unified display similar to other tables
+    candidates_display = candidates.copy()
+    candidates_display["Price & 1D"] = candidates_display.apply(format_price_1d, axis=1)
+
+    desired_cols_cand = [
+        "Price & 1D",
+        "% 5D",
+        "% 1M",
+        "% from 52w High",
+        "RSI Zone",
+        "Value Signal",
+        "VM Score",
+        "Fwd P/E",
+    ]
+    existing_cand = [c for c in desired_cols_cand if c in candidates_display.columns]
+    candidates_display = candidates_display[existing_cand]
 
     cand_format = {
-        "Price": "${:,.2f}",
-        "% 1D": "{:.1f}%",
+        "Price & 1D": "{}",
+        "% 5D": "{:.1f}%",
+        "% 1M": "{:.1f}%",
         "% from 52w High": "{:.1f}%",
+        "VM Score": "{:d}",
         "Fwd P/E": "{:.1f}",
     }
 
@@ -1133,14 +1170,40 @@ if not candidates.empty:
         ],
         overwrite=False,
     )
+
+    # gradients for performance / drawdown
+    cand_pct_cols = [c for c in ["% 5D", "% 1M"] if c in candidates_display.columns]
+    if cand_pct_cols:
+        for col in cand_pct_cols:
+            if candidates_display[col].notna().any():
+                vmin = candidates_display[col].min()
+                vmax = candidates_display[col].max()
+                cand_styled = cand_styled.apply(
+                    lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
+                    subset=[col],
+                    axis=0,
+                )
+
+    if "% from 52w High" in candidates_display.columns:
+        if candidates_display["% from 52w High"].notna().any():
+            vmin = candidates_display["% from 52w High"].min()
+            vmax = 0.0
+            cand_styled = cand_styled.apply(
+                lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
+                subset=["% from 52w High"],
+                axis=0,
+            )
+
     cand_styled = cand_styled.applymap(rsi_zone_style, subset=["RSI Zone"])
-    cand_styled = cand_styled.apply(lambda row: price_style(row), subset=["Price"], axis=1)
-    cand_styled = cand_styled.applymap(pct1d_style, subset=["% 1D"])
+    cand_styled = cand_styled.applymap(price_1d_style, subset=["Price & 1D"])
+
+    cand_column_config = build_column_config(candidates_display.columns)
 
     st.dataframe(
         cand_styled,
         use_container_width=True,
         height=400,
+        column_config=cand_column_config,
     )
 else:
     st.write(
