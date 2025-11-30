@@ -315,7 +315,7 @@ US_MACRO_ETFS = [
 ]
 
 GLOBAL_INDICES = [
-    ("^SSEC", "China (Shanghai)"),
+    ("000001.SS", "China (Shanghai)"),   # fixed symbol
     ("^KS11", "Korea (KOSPI)"),
     ("^N225", "Japan (Nikkei)"),
     ("^TWII", "Taiwan (TAIEX)"),
@@ -329,15 +329,6 @@ GLOBAL_INDICES = [
 real_symbols = [t for t, _ in US_MACRO_ETFS if t != "MARKET"] + [t for t, _ in GLOBAL_INDICES]
 status_map = {sym: get_ticker_status(sym) for sym in real_symbols}
 status_map["MARKET"] = (active_mode, active_price, None, active_change_pct, active_arrow)
-
-# China fallback
-mode_ssec, price_ssec, chg_ssec, chg_pct_ssec, arr_ssec = status_map.get(
-    "^SSEC", (None, None, None, None, None)
-)
-if price_ssec is None:
-    fb = get_ticker_status("000001.SS")
-    if fb[1] is not None:
-        status_map["^SSEC"] = fb
 
 market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
 market_state_map["MARKET"] = get_market_state(active_symbol)
@@ -865,7 +856,7 @@ def get_stock_summary(tickers):
                     "% 1D": round(change_pct_rt, 2) if change_pct_rt is not None else None,
                     "% 5D": pct_5d,
                     "% 1M": pct_1m,
-                    "% from 52w High": pct_from_52wk,
+                    "% from 52w High": pct_from_52wkt,
                     "RSI Zone": rsi_zone_str,
                     "Value Signal": value_signal,
                     "VM Score Raw": vm_score_raw,
@@ -1106,7 +1097,7 @@ if not df.empty:
 
     st.dataframe(
         styled,
-        use_container_width=True,
+        width="stretch",
         height=600,
         column_config=column_config,
     )
@@ -1202,7 +1193,7 @@ if not df_ndx.empty:
 
     st.dataframe(
         styled_ndx,
-        use_container_width=True,
+        width="stretch",
         height=600,
         column_config=ndx_column_config,
     )
@@ -1301,7 +1292,7 @@ if not candidates.empty:
 
     st.dataframe(
         cand_styled,
-        use_container_width=True,
+        width="stretch",
         height=400,
     )
 else:
