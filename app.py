@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import datetime as dt
 from ta.momentum import RSIIndicator
+from pandas import IndexSlice  # for Styler.map subset
 
 # -------------- PAGE CONFIG ------------------
 st.set_page_config(
@@ -315,7 +316,7 @@ US_MACRO_ETFS = [
 ]
 
 GLOBAL_INDICES = [
-    ("000001.SS", "China (Shanghai)"),   # fixed symbol
+    ("000001.SS", "China (Shanghai)"),
     ("^KS11", "Korea (KOSPI)"),
     ("^N225", "Japan (Nikkei)"),
     ("^TWII", "Taiwan (TAIEX)"),
@@ -332,7 +333,6 @@ status_map["MARKET"] = (active_mode, active_price, None, active_change_pct, acti
 
 market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
 market_state_map["MARKET"] = get_market_state(active_symbol)
-
 
 st.markdown("### US Macro & Sector Pulse")
 
@@ -560,7 +560,7 @@ FOCUS_TICKERS = ["NVDA", "TSM", "AMD", "AVGO", "AMKR", "PLTR", "META"]
 
 def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     """
-    Text/emoji signal (for humans) – RSI is now informational only.
+    Text/emoji signal – RSI is informational only.
     Logic uses:
       - depth of drawdown
       - 1M move
@@ -569,8 +569,7 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     if pct_from_high is None:
         return "❔ Check data"
 
-    # Deep value pullback:
-    # big drawdown, reasonable valuation, and not already ripping vertically
+    # Deep value pullback
     if (
         pct_from_high <= -30
         and (fpe is None or fpe <= 30)
@@ -578,18 +577,15 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     ):
         return "💚 Deep value pullback"
 
-    # Value watch:
-    # decent discount + ok valuation
+    # Value watch
     if pct_from_high <= -15 and (fpe is None or fpe <= 35):
         return "🟡 Value watch"
 
-    # Momentum trend (RSI-free):
-    # recent positive 1M performance, not at extreme discount
+    # Momentum trend (RSI-free)
     if pct_1m is not None and pct_1m > 0 and pct_from_high >= -25:
         return "🔵 Momentum trend"
 
-    # Hot / extended:
-    # near highs and/or expensive with recent strength
+    # Hot / extended
     if (
         pct_from_high >= -5
         and fpe is not None
@@ -608,13 +604,10 @@ def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
       - Drawdown depth
       - 1M price action
       - Hot penalty
-
-    RSI is *not* used in the score anymore.
     """
 
-    # ----- Value points -----
+    # Value points
     if fpe is None:
-        # neutral if unknown
         val_points = 1
     else:
         if fpe <= 20:
@@ -626,7 +619,7 @@ def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
         else:
             val_points = 0
 
-    # ----- Drawdown points -----
+    # Drawdown points
     dd_points = 0
     if pct_from_high is not None:
         if pct_from_high <= -40:
@@ -636,22 +629,19 @@ def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
         elif pct_from_high <= -20:
             dd_points = 1
 
-    # ----- 1M momentum points (no RSI) -----
+    # 1M momentum points
     mom_points = 0
     if pct_1m is not None:
-        # modest strength – 1 point
         if pct_1m > 0:
             mom_points += 1
-        # strong recent move – second point
         if pct_1m > 10:
             mom_points += 1
     mom_points = min(mom_points, 2)
 
     score = val_points + dd_points + mom_points
 
-    # ----- Hot penalty (no RSI) -----
+    # Hot penalty
     hot = False
-    # Near highs and expensive
     if (
         pct_from_high is not None
         and pct_from_high >= -5
@@ -659,7 +649,6 @@ def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
         and fpe >= 35
     ):
         hot = True
-    # Or very strong short-term rip while also expensive
     if (
         pct_1m is not None
         and pct_1m > 15
@@ -856,7 +845,7 @@ def get_stock_summary(tickers):
                     "% 1D": round(change_pct_rt, 2) if change_pct_rt is not None else None,
                     "% 5D": pct_5d,
                     "% 1M": pct_1m,
-                    "% from 52w High": pct_from_52wkt,
+                    "% from 52w High": pct_from_52wk,  # FIXED NAME
                     "RSI Zone": rsi_zone_str,
                     "Value Signal": value_signal,
                     "VM Score Raw": vm_score_raw,
@@ -1012,7 +1001,6 @@ with focus_cols[1]:
     )
     focus_mode = st.checkbox(" ", key="focus_mode", label_visibility="collapsed")
 
-
 with st.spinner("📡 Fetching data for Tech leadership table..."):
     df = get_stock_summary(TOP_TECH_TICKERS)
 
@@ -1081,6 +1069,11 @@ if not df.empty:
             axis=0,
         )
 
+    # replace applymap with map (no deprecation warning)
+    styled = styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
+    styled = styled.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
+    styled = styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
+
     styled = styled.set_table_styles(
         [
             {"selector": "th.col_heading", "props": [("text-align", "center")]},
@@ -1088,10 +1081,6 @@ if not df.empty:
         ],
         overwrite=False,
     )
-
-    styled = styled.applymap(rsi_zone_style, subset=["RSI Zone"])
-    styled = styled.applymap(price_1d_style, subset=["Price & 1D"])
-    styled = styled.applymap(vm_score_style, subset=["VM Score"])
 
     column_config = build_column_config(df_display.columns)
 
@@ -1177,6 +1166,10 @@ if not df_ndx.empty:
             axis=0,
         )
 
+    styled_ndx = styled_ndx.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
+    styled_ndx = styled_ndx.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
+    styled_ndx = styled_ndx.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
+
     styled_ndx = styled_ndx.set_table_styles(
         [
             {"selector": "th.col_heading", "props": [("text-align", "center")]},
@@ -1184,10 +1177,6 @@ if not df_ndx.empty:
         ],
         overwrite=False,
     )
-
-    styled_ndx = styled_ndx.applymap(rsi_zone_style, subset=["RSI Zone"])
-    styled_ndx = styled_ndx.applymap(price_1d_style, subset=["Price & 1D"])
-    styled_ndx = styled_ndx.applymap(vm_score_style, subset=["VM Score"])
 
     ndx_column_config = build_column_config(df_ndx_display.columns)
 
@@ -1285,10 +1274,10 @@ if not candidates.empty:
         ],
         overwrite=False,
     )
-    cand_styled = cand_styled.applymap(rsi_zone_style, subset=["RSI Zone"])
+    cand_styled = cand_styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
     cand_styled = cand_styled.apply(lambda row: price_style(row), subset=["Price"], axis=1)
-    cand_styled = cand_styled.applymap(pct1d_style, subset=["% 1D"])
-    cand_styled = cand_styled.applymap(vm_score_style, subset=["VM Score"])
+    cand_styled = cand_styled.map(pct1d_style, subset=IndexSlice[:, ["% 1D"]])
+    cand_styled = cand_styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
 
     st.dataframe(
         cand_styled,
