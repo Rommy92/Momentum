@@ -569,26 +569,42 @@ FOCUS_TICKERS = ["NVDA", "TSM", "AMD", "AVGO", "AMKR", "PLTR", "META"]
 
 def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     """
-    Text/emoji signal (for humans).
-    Logic is aligned with the VM score but separate.
+    Text/emoji signal (for humans) – RSI is now informational only.
+    Logic uses:
+      - depth of drawdown
+      - 1M move
+      - forward P/E
     """
-    if rsi is None or pct_from_high is None:
+    if pct_from_high is None:
         return "❔ Check data"
 
-    # Deep value
-    if (rsi < 35) and (pct_from_high <= -30) and (fpe is None or fpe <= 30):
+    # Deep value pullback:
+    # big drawdown, reasonable valuation, and not already ripping vertically
+    if (
+        pct_from_high <= -30
+        and (fpe is None or fpe <= 30)
+        and (pct_1m is None or pct_1m <= 10)
+    ):
         return "💚 Deep value pullback"
 
-    # Value watch
-    if (rsi < 50) and (pct_from_high <= -15) and (fpe is None or fpe <= 35):
+    # Value watch:
+    # decent discount + ok valuation
+    if pct_from_high <= -15 and (fpe is None or fpe <= 35):
         return "🟡 Value watch"
 
-    # Momentum trend
-    if (50 <= rsi <= 70) and (pct_1m is not None and pct_1m > 0):
+    # Momentum trend (RSI-free):
+    # recent positive 1M performance, not at extreme discount
+    if pct_1m is not None and pct_1m > 0 and pct_from_high >= -25:
         return "🔵 Momentum trend"
 
-    # Hot / extended
-    if (rsi > 70) or (pct_from_high >= -5 and (fpe is not None and fpe >= 45)):
+    # Hot / extended:
+    # near highs and/or expensive with recent strength
+    if (
+        pct_from_high >= -5
+        and fpe is not None
+        and fpe >= 45
+        and (pct_1m is None or pct_1m >= 0)
+    ):
         return "🔴 Hot / extended"
 
     return "⚪ Neutral"
@@ -599,14 +615,16 @@ def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
     Numeric VM score 0–8 combining:
       - Value (forward P/E)
       - Drawdown depth
-      - Momentum health
+      - 1M price action
       - Hot penalty
+
+    RSI is *not* used in the score anymore.
     """
 
-    # Value points
-    val_points = 0
+    # ----- Value points -----
     if fpe is None:
-        val_points = 1  # neutral if we don't know
+        # neutral if unknown
+        val_points = 1
     else:
         if fpe <= 20:
             val_points = 3
@@ -617,7 +635,7 @@ def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
         else:
             val_points = 0
 
-    # Drawdown points
+    # ----- Drawdown points -----
     dd_points = 0
     if pct_from_high is not None:
         if pct_from_high <= -40:
@@ -627,21 +645,36 @@ def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
         elif pct_from_high <= -20:
             dd_points = 1
 
-    # Momentum points (trend health, not chase)
+    # ----- 1M momentum points (no RSI) -----
     mom_points = 0
-    if rsi is not None and 40 <= rsi <= 60:
-        mom_points += 1
-    if pct_1m is not None and pct_1m > 0:
-        mom_points += 1
+    if pct_1m is not None:
+        # modest strength – 1 point
+        if pct_1m > 0:
+            mom_points += 1
+        # strong recent move – second point
+        if pct_1m > 10:
+            mom_points += 1
     mom_points = min(mom_points, 2)
 
     score = val_points + dd_points + mom_points
 
-    # Hot penalty
+    # ----- Hot penalty (no RSI) -----
     hot = False
-    if rsi is not None and rsi >= 70:
+    # Near highs and expensive
+    if (
+        pct_from_high is not None
+        and pct_from_high >= -5
+        and fpe is not None
+        and fpe >= 35
+    ):
         hot = True
-    if pct_from_high is not None and pct_from_high >= -5 and fpe is not None and fpe >= 35:
+    # Or very strong short-term rip while also expensive
+    if (
+        pct_1m is not None
+        and pct_1m > 15
+        and fpe is not None
+        and fpe >= 40
+    ):
         hot = True
 
     if hot:
@@ -1200,13 +1233,12 @@ def build_buy_candidates(df_tech, df_nasdaq):
     if focus_mode:
         base = base.loc[base.index.intersection(FOCUS_TICKERS)]
 
-    rsi_numeric = base["RSI Zone"].str.extract(r"([\d.]+)").astype(float)[0]
-    base["RSI_numeric"] = rsi_numeric
-
     mask = pd.Series(True, index=base.index)
 
+    # Drawdown filter from sidebar
     mask &= base["% from 52w High"] <= min_dd
-    mask &= base["RSI_numeric"] < 55
+
+    # Valuation guardrails
     mask &= base["Fwd P/E"].notna()
     mask &= base["Fwd P/E"] <= float(max_fpe)
 
@@ -1284,14 +1316,16 @@ else:
 st.markdown("---")
 st.markdown(
     """
-**VM Score (0–8) – combined value + drawdown + momentum, with hot penalty**  
-- Higher score = better blend of: **cheap / beaten-up / healthy trend / not overheated**.  
+**VM Score (0–8) – combined value + drawdown + 1M price action, with hot penalty**  
+- Higher score = better blend of: **cheap / beaten-up / stabilising / not overheated**.  
 
 **Value Signal (inside VM column)**  
-- 💚 **Deep value pullback** – Big drawdown vs 52-week high, low or reasonable forward P/E, weak RSI.  
+- 💚 **Deep value pullback** – Big drawdown vs 52-week high, low or reasonable forward P/E, and not already ripping.  
 - 🟡 **Value watch** – Decent pullback, valuation reasonable but not screaming.  
-- 🔵 **Momentum trend** – Positive 1-month performance with RSI in 50–70 zone.  
-- 🔴 **Hot / extended** – Near highs and/or expensive forward P/E, or overbought RSI.  
-- ⚪ **Neutral** – No strong edge from value or momentum.
+- 🔵 **Momentum trend** – Positive 1-month performance with moderate drawdown.  
+- 🔴 **Hot / extended** – Near highs and/or expensive forward P/E with recent strength.  
+- ⚪ **Neutral** – No strong edge from value or price action.
+
+**RSI Zone** is now informational only – for context, not used in the VM Score or filters.
 """
 )
