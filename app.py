@@ -445,6 +445,7 @@ TOP_TECH_TICKERS = [
     "SMCI",
     "AXON",
     "SYM",
+    "MU",
     "ISRG",
 ]
 
