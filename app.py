@@ -709,46 +709,39 @@ def rsi_zone_style(val):
     return "color: #ef4444; font-weight: 600;"
 
 
-# base colours for gradients
-RED = (239, 68, 68)
-BLACK = (0, 0, 0)
-GREEN = (34, 197, 94)
-
-
-def _blend(c_from, c_to, t: float):
-    t = max(0.0, min(1.0, float(t)))
-    return tuple(int(round(cf + (ct - cf) * t)) for cf, ct in zip(c_from, c_to))
-
-
-def _rgb_css(c):
-    return f"background-color: rgb({c[0]}, {c[1]}, {c[2]});"
-
-
-def color_tripolar(v, vmin, vmax):
-    if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
+def pct_generic_style(val):
+    """
+    Simple text color for % columns: green positive, red negative.
+    """
+    if pd.isna(val):
         return ""
-    v = float(v)
-    mid = 0.0
-    if v < mid:
-        if vmin >= mid:
-            return ""
-        t = (v - mid) / (vmin - mid)
-        col = _blend(BLACK, RED, t)
-    else:
-        if vmax <= mid:
-            return ""
-        t = (v - mid) / (vmax - mid)
-        col = _blend(BLACK, GREEN, t)
-    return _rgb_css(col)
+    v = float(val)
+    if v > 0:
+        return "color: #22c55e; font-weight: 600;"
+    if v < 0:
+        return "color: #ef4444; font-weight: 600;"
+    return "color: #e5e5e5; font-weight: 600;"
 
 
-def color_bipolar(v, vmin, vmax):
-    if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
+def dd_style(val):
+    """
+    Style for '% from 52w High':
+    deeper negative = greener, near 0 = grey/red.
+    """
+    if pd.isna(val):
         return ""
-    v = float(v)
-    t = (v - vmin) / (vmax - vmin)
-    col = _blend(RED, GREEN, t)
-    return _rgb_css(col)
+    v = float(val)
+    # v is typically negative (down from high)
+    if v <= -40:
+        return "color: #22c55e; font-weight: 800;"
+    if v <= -30:
+        return "color: #22c55e; font-weight: 700;"
+    if v <= -20:
+        return "color: #eab308; font-weight: 600;"
+    if v <= -10:
+        return "color: #3b82f6; font-weight: 500;"
+    # close to highs
+    return "color: #f97316; font-weight: 500;"
 
 
 @st.cache_data(ttl=60)
@@ -1051,29 +1044,14 @@ if not df.empty:
 
     styled = df_display.style.format(format_dict, na_rep="–")
 
-    pct_cols = ["% 5D", "% 1M"]
-    dist_col = "% from 52w High"
+    # Element-wise styling
+    if "% 5D" in df_display.columns:
+        styled = styled.map(pct_generic_style, subset=IndexSlice[:, ["% 5D"]])
+    if "% 1M" in df_display.columns:
+        styled = styled.map(pct_generic_style, subset=IndexSlice[:, ["% 1M"]])
+    if "% from 52w High" in df_display.columns:
+        styled = styled.map(dd_style, subset=IndexSlice[:, ["% from 52w High"]])
 
-    for col in pct_cols:
-        if df_display[col].notna().any():
-            vmin = df_display[col].min()
-            vmax = df_display[col].max()
-            styled = styled.apply(
-                lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
-                subset=[col],
-                axis=0,
-            )
-
-    if df_display[dist_col].notna().any():
-        vmin = df_display[dist_col].min()
-        vmax = 0.0
-        styled = styled.apply(
-            lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
-            subset=[dist_col],
-            axis=0,
-        )
-
-    # elementwise styling
     styled = styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
     styled = styled.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
     styled = styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
@@ -1148,27 +1126,13 @@ if not df_ndx.empty:
 
     styled_ndx = df_ndx_display.style.format(ndx_format_dict, na_rep="–")
 
-    ndx_pct_cols = ["% 5D", "% 1M"]
-    ndx_dist_col = "% from 52w High"
-
-    for col in ndx_pct_cols:
-        if df_ndx_display[col].notna().any():
-            vmin = df_ndx_display[col].min()
-            vmax = df_ndx_display[col].max()
-            styled_ndx = styled_ndx.apply(
-                lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
-                subset=[col],
-                axis=0,
-            )
-
-    if df_ndx_display[ndx_dist_col].notna().any():
-        vmin = df_ndx_display[ndx_dist_col].min()
-        vmax = 0.0
-        styled_ndx = styled_ndx.apply(
-            lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
-                subset=[ndx_dist_col],
-                axis=0,
-            )
+    # Element-wise styling
+    if "% 5D" in df_ndx_display.columns:
+        styled_ndx = styled_ndx.map(pct_generic_style, subset=IndexSlice[:, ["% 5D"]])
+    if "% 1M" in df_ndx_display.columns:
+        styled_ndx = styled_ndx.map(pct_generic_style, subset=IndexSlice[:, ["% 1M"]])
+    if "% from 52w High" in df_ndx_display.columns:
+        styled_ndx = styled_ndx.map(dd_style, subset=IndexSlice[:, ["% from 52w High"]])
 
     styled_ndx = styled_ndx.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
     styled_ndx = styled_ndx.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
@@ -1250,7 +1214,6 @@ else:
     candidates = pd.DataFrame()
 
 if not candidates.empty:
-    # Build Price & 1D combined too (for consistency if you want to show it later)
     candidates["Price & 1D"] = candidates.apply(format_price_1d, axis=1)
 
     show_cols = [
@@ -1278,7 +1241,6 @@ if not candidates.empty:
         ],
         overwrite=False,
     )
-    # Only elementwise styling – no axis=1 apply
     cand_styled = cand_styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
     cand_styled = cand_styled.map(pct1d_style, subset=IndexSlice[:, ["% 1D"]])
     cand_styled = cand_styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
