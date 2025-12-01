@@ -46,19 +46,33 @@ def get_ticker_status(symbol: str):
     """
     Realtime-like status.
 
-    Priority 1: use Yahoo 'regularMarket*' fields from get_info()
+    Priority 1: use Yahoo 'pre/post/regularMarket*' fields from get_info()
     Priority 2: fall back to 2-day daily history + 1m intraday.
 
     Returns (mode, price, change, change_pct, arrow).
     """
-    # --------- PATH 1: regularMarket* from get_info() ----------
+    # --------- PATH 1: marketState + pre/post/regular fields ----------
     try:
         t = yf.Ticker(symbol)
         info = t.get_info() or {}
 
-        price = info.get("regularMarketPrice", None)
-        change = info.get("regularMarketChange", None)
-        change_pct = info.get("regularMarketChangePercent", None)
+        state = str(info.get("marketState", "")).upper()
+
+        price = change = change_pct = None
+
+        if state == "PRE":
+            price = info.get("preMarketPrice") or info.get("regularMarketPrice")
+            change = info.get("preMarketChange")
+            change_pct = info.get("preMarketChangePercent")
+        elif state == "POST":
+            price = info.get("postMarketPrice") or info.get("regularMarketPrice")
+            change = info.get("postMarketChange")
+            change_pct = info.get("postMarketChangePercent")
+        else:
+            # REGULAR or anything else
+            price = info.get("regularMarketPrice")
+            change = info.get("regularMarketChange")
+            change_pct = info.get("regularMarketChangePercent")
 
         if price is not None and change_pct is not None:
             price = float(price)
@@ -67,6 +81,7 @@ def get_ticker_status(symbol: str):
             if change is not None:
                 change = float(change)
             else:
+                # Reconstruct change if missing but pct + price exist
                 try:
                     prev_close = price / (1 + change_pct / 100.0)
                     change = price - prev_close
@@ -87,7 +102,7 @@ def get_ticker_status(symbol: str):
     except Exception:
         pass
 
-    # --------- PATH 2: 2d daily + 1m intraday ----------
+    # --------- PATH 2: 2d daily + 1m intraday (prepost=True) ----------
     try:
         t = yf.Ticker(symbol)
 
@@ -846,7 +861,7 @@ def get_stock_summary(tickers):
                     "% 1D": round(change_pct_rt, 2) if change_pct_rt is not None else None,
                     "% 5D": pct_5d,
                     "% 1M": pct_1m,
-                    "% from 52w High": pct_from_52wk,  # FIXED NAME
+                    "% from 52w High": pct_from_52wk,
                     "RSI Zone": rsi_zone_str,
                     "Value Signal": value_signal,
                     "VM Score Raw": vm_score_raw,
@@ -889,18 +904,6 @@ def build_column_config(columns):
         else:
             cfg[col] = st.column_config.Column(width="fit")
     return cfg
-
-
-# styling for separate Price/%1D (used in Buy-Zone candidates)
-def price_style(row):
-    val = row.get("% 1D", None)
-    if pd.isna(val):
-        return [""]  # no style
-    if val > 0:
-        return ["color: #22c55e; font-weight: 600;"]
-    if val < 0:
-        return ["color: #ef4444; font-weight: 600;"]
-    return ["color: #e5e5e5; font-weight: 600;"]
 
 
 def pct1d_style(val):
@@ -1070,7 +1073,7 @@ if not df.empty:
             axis=0,
         )
 
-    # replace applymap with map (no deprecation warning)
+    # elementwise styling
     styled = styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
     styled = styled.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
     styled = styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
@@ -1163,9 +1166,9 @@ if not df_ndx.empty:
         vmax = 0.0
         styled_ndx = styled_ndx.apply(
             lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
-            subset=[ndx_dist_col],
-            axis=0,
-        )
+                subset=[ndx_dist_col],
+                axis=0,
+            )
 
     styled_ndx = styled_ndx.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
     styled_ndx = styled_ndx.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
@@ -1247,7 +1250,7 @@ else:
     candidates = pd.DataFrame()
 
 if not candidates.empty:
-    # Build Price & 1D combined for candidates as well (for visual consistency if needed)
+    # Build Price & 1D combined too (for consistency if you want to show it later)
     candidates["Price & 1D"] = candidates.apply(format_price_1d, axis=1)
 
     show_cols = [
@@ -1275,8 +1278,8 @@ if not candidates.empty:
         ],
         overwrite=False,
     )
+    # Only elementwise styling – no axis=1 apply
     cand_styled = cand_styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
-    cand_styled = cand_styled.apply(lambda row: price_style(row), subset=["Price"], axis=1)
     cand_styled = cand_styled.map(pct1d_style, subset=IndexSlice[:, ["% 1D"]])
     cand_styled = cand_styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
 
