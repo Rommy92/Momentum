@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import datetime as dt
 from ta.momentum import RSIIndicator
+from pandas import IndexSlice  # for Styler.map subset
 
 # -------------- PAGE CONFIG ------------------
 st.set_page_config(
@@ -45,33 +46,19 @@ def get_ticker_status(symbol: str):
     """
     Realtime-like status.
 
-    Priority 1: use Yahoo 'pre/post/regularMarket*' fields from get_info()
+    Priority 1: use Yahoo 'regularMarket*' fields from get_info()
     Priority 2: fall back to 2-day daily history + 1m intraday.
 
     Returns (mode, price, change, change_pct, arrow).
     """
-    # --------- PATH 1: marketState + pre/post/regular fields ----------
+    # --------- PATH 1: regularMarket* from get_info() ----------
     try:
         t = yf.Ticker(symbol)
         info = t.get_info() or {}
 
-        state = str(info.get("marketState", "")).upper()
-
-        price = change = change_pct = None
-
-        if state == "PRE":
-            price = info.get("preMarketPrice") or info.get("regularMarketPrice")
-            change = info.get("preMarketChange")
-            change_pct = info.get("preMarketChangePercent")
-        elif state == "POST":
-            price = info.get("postMarketPrice") or info.get("regularMarketPrice")
-            change = info.get("postMarketChange")
-            change_pct = info.get("postMarketChangePercent")
-        else:
-            # REGULAR or anything else
-            price = info.get("regularMarketPrice")
-            change = info.get("regularMarketChange")
-            change_pct = info.get("regularMarketChangePercent")
+        price = info.get("regularMarketPrice", None)
+        change = info.get("regularMarketChange", None)
+        change_pct = info.get("regularMarketChangePercent", None)
 
         if price is not None and change_pct is not None:
             price = float(price)
@@ -80,7 +67,6 @@ def get_ticker_status(symbol: str):
             if change is not None:
                 change = float(change)
             else:
-                # Reconstruct change if missing but pct + price exist
                 try:
                     prev_close = price / (1 + change_pct / 100.0)
                     change = price - prev_close
@@ -101,7 +87,7 @@ def get_ticker_status(symbol: str):
     except Exception:
         pass
 
-    # --------- PATH 2: 2d daily + 1m intraday (prepost=True) ----------
+    # --------- PATH 2: 2d daily + 1m intraday ----------
     try:
         t = yf.Ticker(symbol)
 
@@ -460,7 +446,6 @@ TOP_TECH_TICKERS = [
     "AXON",
     "SYM",
     "ISRG",
-    "MU",
 ]
 
 NASDAQ100_TICKERS = [
@@ -691,6 +676,65 @@ def rsi_zone_text(rsi_val: float) -> str:
     return f"{rsi_val:.1f} – {zone}"
 
 
+def rsi_zone_style(val):
+    if val is None:
+        return ""
+    try:
+        num_str = str(val).split()[0]
+        rsi = float(num_str)
+    except Exception:
+        return ""
+    if rsi < 30:
+        return "color: #22c55e; font-weight: 600;"
+    if rsi < 50:
+        return "color: #eab308; font-weight: 600;"
+    if rsi < 70:
+        return "color: #3b82f6; font-weight: 600;"
+    return "color: #ef4444; font-weight: 600;"
+
+
+# base colours for gradients
+RED = (239, 68, 68)
+BLACK = (0, 0, 0)
+GREEN = (34, 197, 94)
+
+
+def _blend(c_from, c_to, t: float):
+    t = max(0.0, min(1.0, float(t)))
+    return tuple(int(round(cf + (ct - cf) * t)) for cf, ct in zip(c_from, c_to))
+
+
+def _rgb_css(c):
+    return f"background-color: rgb({c[0]}, {c[1]}, {c[2]});"
+
+
+def color_tripolar(v, vmin, vmax):
+    if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
+        return ""
+    v = float(v)
+    mid = 0.0
+    if v < mid:
+        if vmin >= mid:
+            return ""
+        t = (v - mid) / (vmin - mid)
+        col = _blend(BLACK, RED, t)
+    else:
+        if vmax <= mid:
+            return ""
+        t = (v - mid) / (vmax - mid)
+        col = _blend(BLACK, GREEN, t)
+    return _rgb_css(col)
+
+
+def color_bipolar(v, vmin, vmax):
+    if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
+        return ""
+    v = float(v)
+    t = (v - vmin) / (vmax - vmin)
+    col = _blend(RED, GREEN, t)
+    return _rgb_css(col)
+
+
 @st.cache_data(ttl=60)
 def get_stock_summary(tickers):
     rows = []
@@ -801,7 +845,7 @@ def get_stock_summary(tickers):
                     "% 1D": round(change_pct_rt, 2) if change_pct_rt is not None else None,
                     "% 5D": pct_5d,
                     "% 1M": pct_1m,
-                    "% from 52w High": pct_from_52wk,
+                    "% from 52w High": pct_from_52wk,  # FIXED NAME
                     "RSI Zone": rsi_zone_str,
                     "Value Signal": value_signal,
                     "VM Score Raw": vm_score_raw,
@@ -822,8 +866,8 @@ def get_stock_summary(tickers):
 BASE_COLUMN_CONFIG = {
     col: st.column_config.Column(width="fit")
     for col in [
-        "Price",
-        "Price & 1D",
+        "Price",        # still used in Buy-Zone section
+        "Price & 1D",   # combined column for main tables
         "% 1D",
         "% 5D",
         "% 1M",
@@ -846,6 +890,51 @@ def build_column_config(columns):
     return cfg
 
 
+# styling for separate Price/%1D (used in Buy-Zone candidates)
+def price_style(row):
+    val = row.get("% 1D", None)
+    if pd.isna(val):
+        return [""]  # no style
+    if val > 0:
+        return ["color: #22c55e; font-weight: 600;"]
+    if val < 0:
+        return ["color: #ef4444; font-weight: 600;"]
+    return ["color: #e5e5e5; font-weight: 600;"]
+
+
+def pct1d_style(val):
+    if pd.isna(val):
+        return ""
+    if val > 0:
+        return "color: #22c55e; font-weight: 600;"
+    if val < 0:
+        return "color: #ef4444; font-weight: 600;"
+    return "color: #e5e5e5; font-weight: 600;"
+
+
+# Style for combined "Price & 1D" column
+def price_1d_style(val):
+    """
+    Style for 'Price & 1D' column:
+    - green if 1D % > 0
+    - red if 1D % < 0
+    - grey otherwise
+    """
+    if val is None or val == "–":
+        return ""
+    try:
+        # "$180.62 (+1.4%)"
+        inside = val.split("(")[1].split("%")[0]
+        pct = float(inside)
+    except Exception:
+        return ""
+    if pct > 0:
+        return "color: #22c55e; font-weight: 600;"
+    if pct < 0:
+        return "color: #ef4444; font-weight: 600;"
+    return "color: #e5e5e5; font-weight: 600;"
+
+
 def format_price_1d(row):
     price = row["Price"]
     pct_1d = row["% 1D"]
@@ -854,6 +943,45 @@ def format_price_1d(row):
     if pd.isna(pct_1d):
         return f"${price:,.2f}"
     return f"${price:,.2f} ({pct_1d:+.1f}%)"
+
+
+def vm_score_style(val):
+    """
+    Style VM Score column based on score + emoji.
+    """
+    if val is None or val == "–":
+        return ""
+    txt = str(val)
+
+    # Try to extract numeric score at start
+    score = None
+    try:
+        first_part = txt.split("–")[0].strip()
+        score = int(first_part)
+    except Exception:
+        score = None
+
+    # Emoji-based override
+    if "💚" in txt:
+        return "color: #22c55e; font-weight: 800;"
+    if "🟡" in txt:
+        return "color: #eab308; font-weight: 700;"
+    if "🔵" in txt:
+        return "color: #3b82f6; font-weight: 700;"
+    if "🔴" in txt:
+        return "color: #ef4444; font-weight: 700;"
+
+    # Fallback to numeric
+    if score is not None:
+        if score >= 6:
+            return "color: #22c55e; font-weight: 800;"
+        if score >= 4:
+            return "color: #eab308; font-weight: 700;"
+        if score >= 2:
+            return "color: #3b82f6; font-weight: 600;"
+        return "color: #9ca3af; font-weight: 500;"
+
+    return ""
 
 
 # -------------- TABLE 1: TECH LEADERSHIP ------------------
@@ -918,6 +1046,33 @@ if not df.empty:
     }
 
     styled = df_display.style.format(format_dict, na_rep="–")
+
+    pct_cols = ["% 5D", "% 1M"]
+    dist_col = "% from 52w High"
+
+    for col in pct_cols:
+        if df_display[col].notna().any():
+            vmin = df_display[col].min()
+            vmax = df_display[col].max()
+            styled = styled.apply(
+                lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
+                subset=[col],
+                axis=0,
+            )
+
+    if df_display[dist_col].notna().any():
+        vmin = df_display[dist_col].min()
+        vmax = 0.0
+        styled = styled.apply(
+            lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
+            subset=[dist_col],
+            axis=0,
+        )
+
+    # replace applymap with map (no deprecation warning)
+    styled = styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
+    styled = styled.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
+    styled = styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
 
     styled = styled.set_table_styles(
         [
@@ -988,6 +1143,32 @@ if not df_ndx.empty:
     }
 
     styled_ndx = df_ndx_display.style.format(ndx_format_dict, na_rep="–")
+
+    ndx_pct_cols = ["% 5D", "% 1M"]
+    ndx_dist_col = "% from 52w High"
+
+    for col in ndx_pct_cols:
+        if df_ndx_display[col].notna().any():
+            vmin = df_ndx_display[col].min()
+            vmax = df_ndx_display[col].max()
+            styled_ndx = styled_ndx.apply(
+                lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
+                subset=[col],
+                axis=0,
+            )
+
+    if df_ndx_display[ndx_dist_col].notna().any():
+        vmin = df_ndx_display[ndx_dist_col].min()
+        vmax = 0.0
+        styled_ndx = styled_ndx.apply(
+            lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
+            subset=[ndx_dist_col],
+            axis=0,
+        )
+
+    styled_ndx = styled_ndx.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
+    styled_ndx = styled_ndx.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
+    styled_ndx = styled_ndx.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
 
     styled_ndx = styled_ndx.set_table_styles(
         [
@@ -1065,6 +1246,7 @@ else:
     candidates = pd.DataFrame()
 
 if not candidates.empty:
+    # Build Price & 1D combined for candidates as well (for visual consistency if needed)
     candidates["Price & 1D"] = candidates.apply(format_price_1d, axis=1)
 
     show_cols = [
@@ -1092,6 +1274,10 @@ if not candidates.empty:
         ],
         overwrite=False,
     )
+    cand_styled = cand_styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
+    cand_styled = cand_styled.apply(lambda row: price_style(row), subset=["Price"], axis=1)
+    cand_styled = cand_styled.map(pct1d_style, subset=IndexSlice[:, ["% 1D"]])
+    cand_styled = cand_styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
 
     st.dataframe(
         cand_styled,
