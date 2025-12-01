@@ -3,7 +3,6 @@ import yfinance as yf
 import pandas as pd
 import datetime as dt
 from ta.momentum import RSIIndicator
-from pandas import IndexSlice  # for Styler.map subset
 
 # -------------- PAGE CONFIG ------------------
 st.set_page_config(
@@ -692,58 +691,6 @@ def rsi_zone_text(rsi_val: float) -> str:
     return f"{rsi_val:.1f} – {zone}"
 
 
-def rsi_zone_style(val):
-    if val is None:
-        return ""
-    try:
-        num_str = str(val).split()[0]
-        rsi = float(num_str)
-    except Exception:
-        return ""
-    if rsi < 30:
-        return "color: #22c55e; font-weight: 600;"
-    if rsi < 50:
-        return "color: #eab308; font-weight: 600;"
-    if rsi < 70:
-        return "color: #3b82f6; font-weight: 600;"
-    return "color: #ef4444; font-weight: 600;"
-
-
-def pct_generic_style(val):
-    """
-    Simple text color for % columns: green positive, red negative.
-    """
-    if pd.isna(val):
-        return ""
-    v = float(val)
-    if v > 0:
-        return "color: #22c55e; font-weight: 600;"
-    if v < 0:
-        return "color: #ef4444; font-weight: 600;"
-    return "color: #e5e5e5; font-weight: 600;"
-
-
-def dd_style(val):
-    """
-    Style for '% from 52w High':
-    deeper negative = greener, near 0 = grey/red.
-    """
-    if pd.isna(val):
-        return ""
-    v = float(val)
-    # v is typically negative (down from high)
-    if v <= -40:
-        return "color: #22c55e; font-weight: 800;"
-    if v <= -30:
-        return "color: #22c55e; font-weight: 700;"
-    if v <= -20:
-        return "color: #eab308; font-weight: 600;"
-    if v <= -10:
-        return "color: #3b82f6; font-weight: 500;"
-    # close to highs
-    return "color: #f97316; font-weight: 500;"
-
-
 @st.cache_data(ttl=60)
 def get_stock_summary(tickers):
     rows = []
@@ -875,8 +822,8 @@ def get_stock_summary(tickers):
 BASE_COLUMN_CONFIG = {
     col: st.column_config.Column(width="fit")
     for col in [
-        "Price",        # still used in Buy-Zone section
-        "Price & 1D",   # combined column for main tables
+        "Price",
+        "Price & 1D",
         "% 1D",
         "% 5D",
         "% 1M",
@@ -899,39 +846,6 @@ def build_column_config(columns):
     return cfg
 
 
-def pct1d_style(val):
-    if pd.isna(val):
-        return ""
-    if val > 0:
-        return "color: #22c55e; font-weight: 600;"
-    if val < 0:
-        return "color: #ef4444; font-weight: 600;"
-    return "color: #e5e5e5; font-weight: 600;"
-
-
-# Style for combined "Price & 1D" column
-def price_1d_style(val):
-    """
-    Style for 'Price & 1D' column:
-    - green if 1D % > 0
-    - red if 1D % < 0
-    - grey otherwise
-    """
-    if val is None or val == "–":
-        return ""
-    try:
-        # "$180.62 (+1.4%)"
-        inside = val.split("(")[1].split("%")[0]
-        pct = float(inside)
-    except Exception:
-        return ""
-    if pct > 0:
-        return "color: #22c55e; font-weight: 600;"
-    if pct < 0:
-        return "color: #ef4444; font-weight: 600;"
-    return "color: #e5e5e5; font-weight: 600;"
-
-
 def format_price_1d(row):
     price = row["Price"]
     pct_1d = row["% 1D"]
@@ -940,45 +854,6 @@ def format_price_1d(row):
     if pd.isna(pct_1d):
         return f"${price:,.2f}"
     return f"${price:,.2f} ({pct_1d:+.1f}%)"
-
-
-def vm_score_style(val):
-    """
-    Style VM Score column based on score + emoji.
-    """
-    if val is None or val == "–":
-        return ""
-    txt = str(val)
-
-    # Try to extract numeric score at start
-    score = None
-    try:
-        first_part = txt.split("–")[0].strip()
-        score = int(first_part)
-    except Exception:
-        score = None
-
-    # Emoji-based override
-    if "💚" in txt:
-        return "color: #22c55e; font-weight: 800;"
-    if "🟡" in txt:
-        return "color: #eab308; font-weight: 700;"
-    if "🔵" in txt:
-        return "color: #3b82f6; font-weight: 700;"
-    if "🔴" in txt:
-        return "color: #ef4444; font-weight: 700;"
-
-    # Fallback to numeric
-    if score is not None:
-        if score >= 6:
-            return "color: #22c55e; font-weight: 800;"
-        if score >= 4:
-            return "color: #eab308; font-weight: 700;"
-        if score >= 2:
-            return "color: #3b82f6; font-weight: 600;"
-        return "color: #9ca3af; font-weight: 500;"
-
-    return ""
 
 
 # -------------- TABLE 1: TECH LEADERSHIP ------------------
@@ -1043,18 +918,6 @@ if not df.empty:
     }
 
     styled = df_display.style.format(format_dict, na_rep="–")
-
-    # Element-wise styling
-    if "% 5D" in df_display.columns:
-        styled = styled.map(pct_generic_style, subset=IndexSlice[:, ["% 5D"]])
-    if "% 1M" in df_display.columns:
-        styled = styled.map(pct_generic_style, subset=IndexSlice[:, ["% 1M"]])
-    if "% from 52w High" in df_display.columns:
-        styled = styled.map(dd_style, subset=IndexSlice[:, ["% from 52w High"]])
-
-    styled = styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
-    styled = styled.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
-    styled = styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
 
     styled = styled.set_table_styles(
         [
@@ -1125,18 +988,6 @@ if not df_ndx.empty:
     }
 
     styled_ndx = df_ndx_display.style.format(ndx_format_dict, na_rep="–")
-
-    # Element-wise styling
-    if "% 5D" in df_ndx_display.columns:
-        styled_ndx = styled_ndx.map(pct_generic_style, subset=IndexSlice[:, ["% 5D"]])
-    if "% 1M" in df_ndx_display.columns:
-        styled_ndx = styled_ndx.map(pct_generic_style, subset=IndexSlice[:, ["% 1M"]])
-    if "% from 52w High" in df_ndx_display.columns:
-        styled_ndx = styled_ndx.map(dd_style, subset=IndexSlice[:, ["% from 52w High"]])
-
-    styled_ndx = styled_ndx.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
-    styled_ndx = styled_ndx.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
-    styled_ndx = styled_ndx.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
 
     styled_ndx = styled_ndx.set_table_styles(
         [
@@ -1241,9 +1092,6 @@ if not candidates.empty:
         ],
         overwrite=False,
     )
-    cand_styled = cand_styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
-    cand_styled = cand_styled.map(pct1d_style, subset=IndexSlice[:, ["% 1D"]])
-    cand_styled = cand_styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
 
     st.dataframe(
         cand_styled,
