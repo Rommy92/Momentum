@@ -44,70 +44,33 @@ st.markdown(
 @st.cache_data(ttl=60)
 def get_ticker_status(symbol: str):
     """
-    Realtime-like status with proper session awareness.
+    Realtime-like status.
 
-    Priority 1: use Yahoo 'pre/post/regularMarket*' fields from get_info(),
-                picking the right set based on marketState (PRE / POST / REGULAR).
-    Priority 2: fall back to 2-day daily history + 1m intraday (pre/post).
+    Priority 1: use Yahoo 'regularMarket*' fields from get_info()
+    Priority 2: fall back to 2-day daily history + 1m intraday.
 
     Returns (mode, price, change, change_pct, arrow).
     """
-
-    def _safe_float(x):
-        try:
-            return float(x)
-        except Exception:
-            return None
-
-    # --------- PATH 1: use get_info with session-aware fields ----------
+    # --------- PATH 1: regularMarket* from get_info() ----------
     try:
         t = yf.Ticker(symbol)
         info = t.get_info() or {}
-        state = str(info.get("marketState", "")).upper()
 
-        price = change = change_pct = None
-        base = None  # reference price for % calc
+        price = info.get("regularMarketPrice", None)
+        change = info.get("regularMarketChange", None)
+        change_pct = info.get("regularMarketChangePercent", None)
 
-        # PRE-MARKET
-        if state == "PRE" and info.get("preMarketPrice") is not None:
-            price = _safe_float(info.get("preMarketPrice"))
-            change = _safe_float(info.get("preMarketChange"))
-            change_pct = _safe_float(info.get("preMarketChangePercent"))
-            # Use yesterday's close (or regular price) as base if available
-            base = _safe_float(info.get("regularMarketPreviousClose")) or _safe_float(
-                info.get("regularMarketPrice")
-            )
-
-        # POST-MARKET
-        elif state == "POST" and info.get("postMarketPrice") is not None:
-            price = _safe_float(info.get("postMarketPrice"))
-            change = _safe_float(info.get("postMarketChange"))
-            change_pct = _safe_float(info.get("postMarketChangePercent"))
-            base = _safe_float(info.get("regularMarketPreviousClose")) or _safe_float(
-                info.get("regularMarketPrice")
-            )
-
-        # REGULAR or anything else → fallback to regular fields
-        else:
-            price = _safe_float(info.get("regularMarketPrice"))
-            change = _safe_float(info.get("regularMarketChange"))
-            change_pct = _safe_float(info.get("regularMarketChangePercent"))
-            base = _safe_float(info.get("regularMarketPreviousClose"))
-
-        # Derive missing pieces if we can
-        if price is not None:
-            if change is None and change_pct is not None and base not in (None, 0):
-                change = price - base
-            if change_pct is None and change is not None and base not in (None, 0):
-                change_pct = (change / base) * 100.0
-
-        # If we have a usable price + % move, we are done
         if price is not None and change_pct is not None:
-            if change is None:
-                # Best-effort derive change if missing
-                if base not in (None, 0):
-                    change = price - base
-                else:
+            price = float(price)
+            change_pct = float(change_pct)
+
+            if change is not None:
+                change = float(change)
+            else:
+                try:
+                    prev_close = price / (1 + change_pct / 100.0)
+                    change = price - prev_close
+                except Exception:
                     change = 0.0
 
             if change > 0:
@@ -120,13 +83,11 @@ def get_ticker_status(symbol: str):
                 mode = "neutral"
                 arrow = "▶"
 
-            return mode, float(price), float(change), float(change_pct), arrow
-
+            return mode, price, change, change_pct, arrow
     except Exception:
-        # If get_info() blows up in any way, fall back to history path below
         pass
 
-    # --------- PATH 2: 2d daily + 1m intraday with prepost=True ----------
+    # --------- PATH 2: 2d daily + 1m intraday ----------
     try:
         t = yf.Ticker(symbol)
 
@@ -485,6 +446,7 @@ TOP_TECH_TICKERS = [
     "AXON",
     "SYM",
     "ISRG",
+    "MU",
 ]
 
 NASDAQ100_TICKERS = [
