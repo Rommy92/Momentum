@@ -193,7 +193,7 @@ else:
     accent = "#0ea5e9"
 
 
-# -------------- THEME SWITCHER ------------------
+# -------------- THEME SETUP (STATE, NOT UI YET) ------------------
 
 THEMES = ["Original", "Palantir", "Bloomberg"]
 
@@ -205,19 +205,6 @@ def set_theme(name: str):
     st.session_state["theme"] = name
 
 
-theme_cols = st.columns(len(THEMES))
-for col, name in zip(theme_cols, THEMES):
-    with col:
-        is_current = st.session_state["theme"] == name
-        label = f"✅ {name}" if is_current else name
-        st.button(
-            label,
-            key=f"theme_{name}",
-            on_click=set_theme,
-            args=(name,),
-            use_container_width=True,
-        )
-
 current_theme = st.session_state["theme"]
 
 
@@ -225,113 +212,135 @@ current_theme = st.session_state["theme"]
 
 
 def get_theme_css(theme: str, accent_color: str) -> str:
+    # Palantir: bright, clean, white, memo-style
     if theme == "Palantir":
-        return f"""
+        return """
         <style>
-        [data-testid="stAppViewContainer"] {{
-            background-color: #f5f5f5 !important;
+        [data-testid="stAppViewContainer"] {
+            background-color: #f3f4f6 !important;
             color: #111827 !important;
-        }}
+        }
 
-        [data-testid="stSidebar"] {{
+        [data-testid="stSidebar"] {
             background-color: #ffffff !important;
             color: #111827 !important;
             border-right: 1px solid #e5e7eb !important;
-        }}
+        }
 
-        html, body, [class*="css"] {{
+        html, body, [class*="css"] {
             color: #111827 !important;
-            background-color: #f5f5f5 !important;
-        }}
+            background-color: #f3f4f6 !important;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+        }
 
-        h1, h2 {{
+        h1, h2 {
             color: #0f172a !important;
             text-shadow: none !important;
             text-align: center;
-        }}
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
 
-        h3, h4 {{
+        h3, h4 {
             color: #374151 !important;
             text-align: center;
-        }}
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.12em;
+        }
 
-        .block-container {{
-            padding-top: 1rem !important;
-            padding-bottom: 1rem !important;
+        .block-container {
+            padding-top: 1.5rem !important;
+            padding-bottom: 1.5rem !important;
             max-width: 1200px !important;
-        }}
+        }
 
-        [data-testid="stDataFrame"] div[role="grid"] {{
+        [data-testid="stDataFrame"] div[role="grid"] {
             background-color: #ffffff !important;
             color: #111827 !important;
-        }}
+            border-radius: 0.75rem !important;
+            border: 1px solid #e5e7eb !important;
+        }
 
-        [data-testid="stDataFrame"] div[role="columnheader"] {{
-            background-color: #f3f4f6 !important;
-            color: #374151 !important;
+        [data-testid="stDataFrame"] div[role="columnheader"] {
+            background-color: #f9fafb !important;
+            color: #4b5563 !important;
             border-bottom: 1px solid #e5e7eb !important;
-        }}
+            text-transform: uppercase;
+            font-size: 0.75rem;
+        }
 
-        [data-testid="stDataFrame"] div[role="cell"] {{
+        [data-testid="stDataFrame"] div[role="cell"] {
             border-bottom: 1px solid #e5e7eb !important;
-        }}
+        }
         </style>
         """
 
+    # Bloomberg: dark terminal, monospaced, yellow headers
     if theme == "Bloomberg":
-        return f"""
+        return """
         <style>
-        [data-testid="stAppViewContainer"] {{
-            background-color: #020617 !important;
+        [data-testid="stAppViewContainer"] {
+            background-color: #000000 !important;
             color: #e5e7eb !important;
-        }}
+        }
 
-        [data-testid="stSidebar"] {{
+        [data-testid="stSidebar"] {
             background-color: #020617 !important;
             color: #e5e7eb !important;
             border-right: 1px solid #1f2937 !important;
-        }}
+        }
 
-        html, body, [class*="css"] {{
+        html, body, [class*="css"] {
             color: #e5e7eb !important;
-            background-color: #020617 !important;
-        }}
+            background-color: #000000 !important;
+            font-family: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+        }
 
-        h1, h2 {{
-            color: #eab308 !important;
+        h1, h2 {
+            color: #facc15 !important;
             text-shadow: none !important;
             text-align: center;
-        }}
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
 
-        h3, h4 {{
-            color: #9ca3af !important;
-            text-align: center;
-        }}
+        h3, h4 {
+            color: #f97316 !important;
+            text-align: left;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.16em;
+        }
 
-        .block-container {{
-            padding-top: 1rem !important;
-            padding-bottom: 1rem !important;
+        .block-container {
+            padding-top: 1.25rem !important;
+            padding-bottom: 1.25rem !important;
             max-width: 100% !important;
-        }}
+        }
 
-        [data-testid="stDataFrame"] div[role="grid"] {{
+        [data-testid="stDataFrame"] div[role="grid"] {
             background-color: #020617 !important;
             color: #e5e7eb !important;
-        }}
+            border-radius: 0 !important;
+            border: 1px solid #1f2937 !important;
+        }
 
-        [data-testid="stDataFrame"] div[role="columnheader"] {{
-            background-color: #030712 !important;
-            color: #eab308 !important;
-            border-bottom: 1px solid #1f2937 !important;
-        }}
+        [data-testid="stDataFrame"] div[role="columnheader"] {
+            background-color: #111827 !important;
+            color: #facc15 !important;
+            border-bottom: 1px solid #4b5563 !important;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+        }
 
-        [data-testid="stDataFrame"] div[role="cell"] {{
+        [data-testid="stDataFrame"] div[role="cell"] {
             border-bottom: 1px solid #111827 !important;
-        }}
+        }
         </style>
         """
 
-    # Original (Cyberpunk)
+    # Original (Cyberpunk): neon, heatmaps
     return f"""
     <style>
     [data-testid="stAppViewContainer"] {{
@@ -437,13 +446,28 @@ with st.sidebar:
     )
 
 
-# -------------- TITLE + HEADER ------------------
+# -------------- TITLE + THEME BUTTONS ------------------
 
 st.title("Global Tech & Macro Dashboard")
 st.caption(
     f"<p style='text-align:center;'>Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
     unsafe_allow_html=True,
 )
+
+theme_cols = st.columns(len(THEMES))
+for col, name in zip(theme_cols, THEMES):
+    with col:
+        is_current = st.session_state["theme"] == name
+        label = f"✅ {name}" if is_current else name
+        st.button(
+            label,
+            key=f"theme_{name}",
+            on_click=set_theme,
+            args=(name,),
+            use_container_width=True,
+        )
+
+current_theme = st.session_state["theme"]  # refresh after possible click
 
 
 # -------------- MACRO / SECTOR / GLOBAL STRIPS ------------------
@@ -487,7 +511,6 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
 
     - Colours label by % move.
     - If show_state is True and market_state == 'Closed' -> appends red '· Closed'.
-    - Never prints 'Open' anywhere.
     - Adapts background/border to theme.
     """
     mode, price, _, chg_pct, arrow = status_tuple
@@ -509,7 +532,8 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
     if price is None or chg_pct is None:
         html = (
             f"<div style='border:1px solid {border}; padding:0.5rem; "
-            f"border-radius:0.75rem; background-color:{card_bg};'>"
+            f"border-radius:{'0.25rem' if theme=='Bloomberg' else '0.75rem'}; "
+            f"background-color:{card_bg};'>"
             f"<div style='font-size:0.8rem; color:{label_color};'>{label}</div>"
             f"<div style='font-weight:600; color:{label_color};'>{ticker_display} data unavailable</div>"
             f"</div>"
@@ -530,7 +554,8 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
 
     html = (
         f"<div style='border:1px solid {border}; padding:0.5rem; "
-        f"border-radius:0.75rem; background-color:{card_bg};'>"
+        f"border-radius:{'0.25rem' if theme=='Bloomberg' else '0.75rem'}; "
+        f"background-color:{card_bg};'>"
         f"<div style='font-size:0.8rem; color:{label_color};'>{label}</div>"
         f"<div style='font-weight:600; color:{txt_color};'>"
         f"{ticker_display} {arrow} ({chg_pct:+.2f}%)"
@@ -869,6 +894,10 @@ def _rgb_css(c):
 
 
 def color_tripolar(v, vmin, vmax):
+    # Palantir = no heatmap background at all (clean white tables)
+    theme = st.session_state.get("theme", "Original")
+    if theme == "Palantir":
+        return ""
     if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
         return ""
     v = float(v)
@@ -887,6 +916,9 @@ def color_tripolar(v, vmin, vmax):
 
 
 def color_bipolar(v, vmin, vmax):
+    theme = st.session_state.get("theme", "Original")
+    if theme == "Palantir":
+        return ""
     if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
         return ""
     v = float(v)
@@ -1026,8 +1058,8 @@ def get_stock_summary(tickers):
 BASE_COLUMN_CONFIG = {
     col: st.column_config.Column(width="fit")
     for col in [
-        "Price",        # still used in Buy-Zone section
-        "Price & 1D",   # combined column for main tables
+        "Price",
+        "Price & 1D",
         "% 1D",
         "% 5D",
         "% 1M",
@@ -1054,12 +1086,12 @@ def build_column_config(columns):
 def price_style(row):
     val = row.get("% 1D", None)
     if pd.isna(val):
-        return [""]  # no style
+        return [""]
     if val > 0:
         return ["color: #22c55e; font-weight: 600;"]
     if val < 0:
         return ["color: #ef4444; font-weight: 600;"]
-    return ["color: #e5e5e5; font-weight: 600;"]
+    return ["color: #6b7280; font-weight: 600;"]
 
 
 def pct1d_style(val):
@@ -1069,21 +1101,14 @@ def pct1d_style(val):
         return "color: #22c55e; font-weight: 600;"
     if val < 0:
         return "color: #ef4444; font-weight: 600;"
-    return "color: #e5e5e5; font-weight: 600;"
+    return "color: #6b7280; font-weight: 600;"
 
 
 # Style for combined "Price & 1D" column
 def price_1d_style(val):
-    """
-    Style for 'Price & 1D' column:
-    - green if 1D % > 0
-    - red if 1D % < 0
-    - grey otherwise
-    """
     if val is None or val == "–":
         return ""
     try:
-        # "$180.62 (+1.4%)"
         inside = val.split("(")[1].split("%")[0]
         pct = float(inside)
     except Exception:
@@ -1106,14 +1131,9 @@ def format_price_1d(row):
 
 
 def vm_score_style(val):
-    """
-    Style VM Score column based on score + emoji.
-    """
     if val is None or val == "–":
         return ""
     txt = str(val)
-
-    # Try to extract numeric score at start
     score = None
     try:
         first_part = txt.split("–")[0].strip()
@@ -1121,7 +1141,6 @@ def vm_score_style(val):
     except Exception:
         score = None
 
-    # Emoji-based override
     if "💚" in txt:
         return "color: #22c55e; font-weight: 800;"
     if "🟡" in txt:
@@ -1131,7 +1150,6 @@ def vm_score_style(val):
     if "🔴" in txt:
         return "color: #ef4444; font-weight: 700;"
 
-    # Fallback to numeric
     if score is not None:
         if score >= 6:
             return "color: #22c55e; font-weight: 800;"
@@ -1152,7 +1170,6 @@ df_ndx = pd.DataFrame()
 st.markdown("---")
 st.markdown("## Megacap & Core")
 
-# Centered Focus Table toggle, green label
 focus_cols = st.columns([1, 1, 1])
 with focus_cols[1]:
     st.markdown(
@@ -1167,7 +1184,6 @@ with st.spinner("📡 Fetching data for Tech leadership table..."):
 if not df.empty:
     df = df.set_index("Ticker")
 
-    # Apply focus universe if enabled
     if focus_mode:
         df = df.loc[df.index.intersection(FOCUS_TICKERS)]
 
@@ -1178,11 +1194,9 @@ if not df.empty:
 
     df_display = df_sorted.drop(columns=["Market Cap", "VM Score Raw"], errors="ignore")
 
-    # combined Price & 1D
     df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
     df_display = df_display.drop(columns=["Price", "% 1D"], errors="ignore")
 
-    # REORDER: Price & 1D first, then VM Score etc.
     desired_order = [
         "Price & 1D",
         "% 5D",
@@ -1229,7 +1243,6 @@ if not df.empty:
             axis=0,
         )
 
-    # replace applymap with map (no deprecation warning)
     styled = styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
     styled = styled.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
     styled = styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
@@ -1268,18 +1281,15 @@ with st.spinner("📡 Fetching Nasdaq-100 data..."):
 if not df_ndx.empty:
     df_ndx = df_ndx.set_index("Ticker")
 
-    # Focus universe here as well
     if focus_mode:
         df_ndx = df_ndx.loc[df_ndx.index.intersection(FOCUS_TICKERS)]
 
     df_ndx = df_ndx.sort_values("% from 52w High")
     df_ndx_display = df_ndx.drop(columns=["Market Cap", "VM Score Raw"], errors="ignore")
 
-    # combined column for Nasdaq table
     df_ndx_display["Price & 1D"] = df_ndx_display.apply(format_price_1d, axis=1)
     df_ndx_display = df_ndx_display.drop(columns=["Price", "% 1D"], errors="ignore")
 
-    # REORDER: Price & 1D first
     desired_order_ndx = [
         "Price & 1D",
         "% 5D",
@@ -1322,8 +1332,8 @@ if not df_ndx.empty:
         vmax = 0.0
         styled_ndx = styled_ndx.apply(
             lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
-            subset=[ndx_dist_col],
-            axis=0,
+                subset=[ndx_dist_col],
+                axis=0,
         )
 
     styled_ndx = styled_ndx.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
@@ -1369,16 +1379,13 @@ def build_buy_candidates(df_tech, df_nasdaq):
     base = pd.concat(sources, axis=0)
     base = base[~base.index.duplicated(keep="first")]
 
-    # Focus universe here too
     if focus_mode:
         base = base.loc[base.index.intersection(FOCUS_TICKERS)]
 
     mask = pd.Series(True, index=base.index)
 
-    # Drawdown filter from sidebar
     mask &= base["% from 52w High"] <= min_dd
 
-    # Valuation guardrails
     mask &= base["Fwd P/E"].notna()
     mask &= base["Fwd P/E"] <= float(max_fpe)
 
@@ -1391,7 +1398,6 @@ def build_buy_candidates(df_tech, df_nasdaq):
     if candidates.empty:
         return candidates
 
-    # Prefer higher VM Score Raw, then deeper drawdown
     if "VM Score Raw" in candidates.columns:
         candidates = candidates.sort_values(["VM Score Raw", "% from 52w High"], ascending=[False, True])
     else:
@@ -1406,7 +1412,6 @@ else:
     candidates = pd.DataFrame()
 
 if not candidates.empty:
-    # Build Price & 1D combined for candidates as well (for visual consistency if needed)
     candidates["Price & 1D"] = candidates.apply(format_price_1d, axis=1)
 
     show_cols = [
