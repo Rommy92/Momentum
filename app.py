@@ -493,17 +493,18 @@ st.caption(
 # Push buttons a bit down so they are visible in Streamlit
 st.markdown("<div style='height:0.75rem;'></div>", unsafe_allow_html=True)
 
+# THEME BUTTONS: no tick, just highlight bar under active theme
 theme_cols = st.columns(len(THEMES))
 for col, name in zip(theme_cols, THEMES):
     with col:
         is_current = st.session_state["theme"] == name
-        label = f"✅ {name}" if is_current else name
-        st.button(
-            label,
-            key=f"theme_{name}",
-            on_click=set_theme,
-            args=(name,),
-            use_container_width=True,
+        if st.button(name, key=f"theme_{name}", use_container_width=True):
+            set_theme(name)
+            is_current = True
+        bar_color = "#facc15" if is_current else "transparent"
+        st.markdown(
+            f"<div style='height:3px; border-radius:999px; margin-top:4px; background:{bar_color};'></div>",
+            unsafe_allow_html=True,
         )
 
 current_theme = st.session_state["theme"]
