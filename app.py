@@ -41,53 +41,63 @@ st.markdown(
 # -------------- REALTIME TICKER STATUS ------------------
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def get_ticker_status(symbol: str):
     """
-    Realtime-like status.
+    Realtime-like price status with full extended-hours support.
 
-    Priority 1: use Yahoo 'regularMarket*' fields from get_info()
-    Priority 2: fall back to 2-day daily history + 1m intraday.
+    Priority 1: Use marketState + pre/post/regular fields from Yahoo get_info().
+    Priority 2: Fall back to intraday 1m data (prepost=True).
 
     Returns (mode, price, change, change_pct, arrow).
     """
-    # --------- PATH 1: regularMarket* from get_info() ----------
+    # -------- Path 1: Use get_info() with marketState --------
     try:
         t = yf.Ticker(symbol)
         info = t.get_info() or {}
+        state = str(info.get("marketState", "")).upper()
 
-        price = info.get("regularMarketPrice", None)
-        change = info.get("regularMarketChange", None)
-        change_pct = info.get("regularMarketChangePercent", None)
+        price = change = change_pct = None
+
+        if state == "PRE":
+            price = info.get("preMarketPrice") or info.get("regularMarketPrice")
+            change = info.get("preMarketChange")
+            change_pct = info.get("preMarketChangePercent")
+
+        elif state == "POST":
+            price = info.get("postMarketPrice") or info.get("regularMarketPrice")
+            change = info.get("postMarketChange")
+            change_pct = info.get("postMarketChangePercent")
+
+        else:  # REGULAR, CLOSED, or anything else
+            price = info.get("regularMarketPrice")
+            change = info.get("regularMarketChange")
+            change_pct = info.get("regularMarketChangePercent")
 
         if price is not None and change_pct is not None:
             price = float(price)
             change_pct = float(change_pct)
 
-            if change is not None:
-                change = float(change)
-            else:
+            if change is None:
                 try:
                     prev_close = price / (1 + change_pct / 100.0)
                     change = price - prev_close
                 except Exception:
                     change = 0.0
+            else:
+                change = float(change)
 
             if change > 0:
-                mode = "green"
-                arrow = "▲"
-            elif change < 0:
-                mode = "red"
-                arrow = "▼"
-            else:
-                mode = "neutral"
-                arrow = "▶"
+                return "green", price, change, change_pct, "▲"
+            if change < 0:
+                return "red", price, change, change_pct, "▼"
+            return "neutral", price, change, change_pct, "▶"
 
-            return mode, price, change, change_pct, arrow
     except Exception:
+        # fall through to intraday path
         pass
 
-    # --------- PATH 2: 2d daily + 1m intraday ----------
+    # -------- Path 2: Use 1m intraday as fallback --------
     try:
         t = yf.Ticker(symbol)
 
@@ -112,16 +122,10 @@ def get_ticker_status(symbol: str):
         change_pct = (change / prev_close) * 100 if prev_close != 0 else 0.0
 
         if change > 0:
-            mode = "green"
-            arrow = "▲"
-        elif change < 0:
-            mode = "red"
-            arrow = "▼"
-        else:
-            mode = "neutral"
-            arrow = "▶"
-
-        return mode, price, change, change_pct, arrow
+            return "green", price, change, change_pct, "▲"
+        if change < 0:
+            return "red", price, change, change_pct, "▼"
+        return "neutral", price, change, change_pct, "▶"
 
     except Exception:
         return "neutral", None, None, None, "▶"
@@ -845,7 +849,7 @@ def get_stock_summary(tickers):
                     "% 1D": round(change_pct_rt, 2) if change_pct_rt is not None else None,
                     "% 5D": pct_5d,
                     "% 1M": pct_1m,
-                    "% from 52w High": pct_from_52wk,  # FIXED NAME
+                    "% from 52w High": pct_from_52wk,
                     "RSI Zone": rsi_zone_str,
                     "Value Signal": value_signal,
                     "VM Score Raw": vm_score_raw,
@@ -1309,3 +1313,5 @@ st.markdown(
 **RSI Zone** is now informational only – for context, not used in the VM Score or filters.
 """
 )
+
+::contentReference[oaicite:0]{index=0}
