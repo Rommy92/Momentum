@@ -37,7 +37,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
 # -------------- REALTIME TICKER STATUS ------------------
 
 
@@ -183,7 +182,6 @@ else:
     active_change_pct = fut_change_pct
     active_arrow = fut_arrow
 
-
 # Accent color based on ACTIVE driver
 if active_mode == "green":
     accent = "#76B900"
@@ -192,8 +190,7 @@ elif active_mode == "red":
 else:
     accent = "#0ea5e9"
 
-
-# -------------- THEME SETUP (STATE, NOT UI YET) ------------------
+# -------------- THEME SETUP ------------------
 
 THEMES = ["Original", "Palantir", "Bloomberg"]
 
@@ -208,9 +205,6 @@ def set_theme(name: str):
 current_theme = st.session_state["theme"]
 
 
-# -------------- THEME CSS ------------------
-
-
 def get_theme_css(theme: str, accent_color: str) -> str:
     # Palantir: bright, clean, white, memo-style
     if theme == "Palantir":
@@ -220,19 +214,16 @@ def get_theme_css(theme: str, accent_color: str) -> str:
             background-color: #f3f4f6 !important;
             color: #111827 !important;
         }
-
         [data-testid="stSidebar"] {
             background-color: #ffffff !important;
             color: #111827 !important;
             border-right: 1px solid #e5e7eb !important;
         }
-
         html, body, [class*="css"] {
             color: #111827 !important;
             background-color: #f3f4f6 !important;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
         }
-
         h1, h2 {
             color: #0f172a !important;
             text-shadow: none !important;
@@ -240,28 +231,24 @@ def get_theme_css(theme: str, accent_color: str) -> str:
             letter-spacing: 0.08em;
             text-transform: uppercase;
         }
-
         h3, h4 {
             color: #374151 !important;
-            text-align: center;
+            text-align: left;
             text-transform: uppercase;
-            font-size: 0.85rem;
-            letter-spacing: 0.12em;
+            font-size: 0.8rem;
+            letter-spacing: 0.14em;
         }
-
         .block-container {
             padding-top: 1.5rem !important;
             padding-bottom: 1.5rem !important;
             max-width: 1200px !important;
         }
-
         [data-testid="stDataFrame"] div[role="grid"] {
             background-color: #ffffff !important;
             color: #111827 !important;
             border-radius: 0.75rem !important;
             border: 1px solid #e5e7eb !important;
         }
-
         [data-testid="stDataFrame"] div[role="columnheader"] {
             background-color: #f9fafb !important;
             color: #4b5563 !important;
@@ -269,7 +256,6 @@ def get_theme_css(theme: str, accent_color: str) -> str:
             text-transform: uppercase;
             font-size: 0.75rem;
         }
-
         [data-testid="stDataFrame"] div[role="cell"] {
             border-bottom: 1px solid #e5e7eb !important;
         }
@@ -284,48 +270,41 @@ def get_theme_css(theme: str, accent_color: str) -> str:
             background-color: #000000 !important;
             color: #e5e7eb !important;
         }
-
         [data-testid="stSidebar"] {
             background-color: #020617 !important;
             color: #e5e7eb !important;
             border-right: 1px solid #1f2937 !important;
         }
-
         html, body, [class*="css"] {
             color: #e5e7eb !important;
             background-color: #000000 !important;
             font-family: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
         }
-
         h1, h2 {
             color: #facc15 !important;
             text-shadow: none !important;
             text-align: center;
             text-transform: uppercase;
-            letter-spacing: 0.12em;
+            letter-spacing: 0.16em;
         }
-
         h3, h4 {
             color: #f97316 !important;
             text-align: left;
             text-transform: uppercase;
             font-size: 0.75rem;
-            letter-spacing: 0.16em;
+            letter-spacing: 0.18em;
         }
-
         .block-container {
             padding-top: 1.25rem !important;
             padding-bottom: 1.25rem !important;
             max-width: 100% !important;
         }
-
         [data-testid="stDataFrame"] div[role="grid"] {
             background-color: #020617 !important;
             color: #e5e7eb !important;
             border-radius: 0 !important;
             border: 1px solid #1f2937 !important;
         }
-
         [data-testid="stDataFrame"] div[role="columnheader"] {
             background-color: #111827 !important;
             color: #facc15 !important;
@@ -333,7 +312,6 @@ def get_theme_css(theme: str, accent_color: str) -> str:
             text-transform: uppercase;
             font-size: 0.75rem;
         }
-
         [data-testid="stDataFrame"] div[role="cell"] {
             border-bottom: 1px solid #111827 !important;
         }
@@ -347,30 +325,25 @@ def get_theme_css(theme: str, accent_color: str) -> str:
         background-color: #000000 !important;
         color: #eeeeee !important;
     }}
-
     [data-testid="stSidebar"] {{
         background-color: #000000 !important;
         color: #eeeeee !important;
         border-right: 1px solid {accent_color}33 !important;
     }}
-
     html, body, [class*="css"] {{
         color: #eeeeee !important;
         background-color: #000000 !important;
     }}
-
     h1, h2 {{
         color: {accent_color} !important;
         text-shadow: 0 0 4px {accent_color}, 0 0 10px {accent_color};
         animation: neonPulse 3s ease-in-out infinite;
         text-align: center;
     }}
-
     h3, h4 {{
         color: {accent_color} !important;
         text-align: center;
     }}
-
     @keyframes neonPulse {{
         0% {{
             text-shadow: 0 0 4px {accent_color}, 0 0 8px {accent_color};
@@ -382,7 +355,6 @@ def get_theme_css(theme: str, accent_color: str) -> str:
             text-shadow: 0 0 4px {accent_color}, 0 0 8px {accent_color};
         }}
     }}
-
     .block-container {{
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
@@ -390,18 +362,15 @@ def get_theme_css(theme: str, accent_color: str) -> str:
         padding-right: 0rem !important;
         max-width: 100% !important;
     }}
-
     [data-testid="stDataFrame"] div[role="grid"] {{
         background-color: #050505 !important;
         color: #ffffff !important;
     }}
-
     [data-testid="stDataFrame"] div[role="columnheader"] {{
         background-color: #101010 !important;
         color: {accent_color} !important;
         border-bottom: 1px solid {accent_color}77 !important;
     }}
-
     [data-testid="stDataFrame"] div[role="cell"] {{
         border-bottom: 1px solid #222222 !important;
     }}
@@ -412,8 +381,7 @@ def get_theme_css(theme: str, accent_color: str) -> str:
 theme_css = get_theme_css(current_theme, accent)
 st.markdown(theme_css, unsafe_allow_html=True)
 
-
-# -------------- SIDEBAR: BUY-ZONE FILTER CONTROLS ------------------
+# -------------- SIDEBAR FILTERS ------------------
 
 with st.sidebar:
     st.header("Buy-Zone Filters")
@@ -445,7 +413,6 @@ with st.sidebar:
         index=0,
     )
 
-
 # -------------- TITLE + THEME BUTTONS ------------------
 
 st.title("Global Tech & Macro Dashboard")
@@ -467,10 +434,9 @@ for col, name in zip(theme_cols, THEMES):
             use_container_width=True,
         )
 
-current_theme = st.session_state["theme"]  # refresh after possible click
+current_theme = st.session_state["theme"]
 
-
-# -------------- MACRO / SECTOR / GLOBAL STRIPS ------------------
+# -------------- UNIVERSES ------------------
 
 US_MACRO_ETFS = [
     ("MARKET", "Market (QQQ / QQQ Futures)"),  # synthetic
@@ -493,115 +459,6 @@ GLOBAL_INDICES = [
     ("^GDAXI", "Germany (DAX)"),
     ("^FCHI", "France (CAC40)"),
 ]
-
-# Status map for all real symbols
-real_symbols = [t for t, _ in US_MACRO_ETFS if t != "MARKET"] + [t for t, _ in GLOBAL_INDICES]
-status_map = {sym: get_ticker_status(sym) for sym in real_symbols}
-status_map["MARKET"] = (active_mode, active_price, None, active_change_pct, active_arrow)
-
-market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
-market_state_map["MARKET"] = get_market_state(active_symbol)
-
-st.markdown("### US Macro & Sector Pulse")
-
-
-def render_card(label, ticker_display, status_tuple, market_state: str, show_state: bool, theme: str):
-    """
-    Card renderer.
-
-    - Colours label by % move.
-    - If show_state is True and market_state == 'Closed' -> appends red '· Closed'.
-    - Adapts background/border to theme.
-    """
-    mode, price, _, chg_pct, arrow = status_tuple
-
-    # Theme-specific card styling
-    if theme == "Palantir":
-        card_bg = "#ffffff"
-        border = "#e5e7eb"
-        label_color = "#6b7280"
-    elif theme == "Bloomberg":
-        card_bg = "#020617"
-        border = "#1f2937"
-        label_color = "#9ca3af"
-    else:  # Original
-        card_bg = "#050505"
-        border = "#1f2933"
-        label_color = "#9ca3af"
-
-    if price is None or chg_pct is None:
-        html = (
-            f"<div style='border:1px solid {border}; padding:0.5rem; "
-            f"border-radius:{'0.25rem' if theme=='Bloomberg' else '0.75rem'}; "
-            f"background-color:{card_bg};'>"
-            f"<div style='font-size:0.8rem; color:{label_color};'>{label}</div>"
-            f"<div style='font-weight:600; color:{label_color};'>{ticker_display} data unavailable</div>"
-            f"</div>"
-        )
-        return html
-
-    if chg_pct > 0:
-        txt_color = "#22c55e"
-    elif chg_pct < 0:
-        txt_color = "#ef4444"
-    else:
-        txt_color = "#e5e5e5" if theme != "Palantir" else "#4b5563"
-
-    if show_state and market_state == "Closed":
-        state_html = "<span style='color:#ef4444;'> · Closed</span>"
-    else:
-        state_html = ""
-
-    html = (
-        f"<div style='border:1px solid {border}; padding:0.5rem; "
-        f"border-radius:{'0.25rem' if theme=='Bloomberg' else '0.75rem'}; "
-        f"background-color:{card_bg};'>"
-        f"<div style='font-size:0.8rem; color:{label_color};'>{label}</div>"
-        f"<div style='font-weight:600; color:{txt_color};'>"
-        f"{ticker_display} {arrow} ({chg_pct:+.2f}%)"
-        f"{state_html}"
-        f"</div>"
-        f"</div>"
-    )
-    return html
-
-
-cards_per_row = 4
-for i in range(0, len(US_MACRO_ETFS), cards_per_row):
-    row = US_MACRO_ETFS[i: i + cards_per_row]
-    cols = st.columns(len(row))
-    for (ticker, label), col in zip(row, cols):
-        with col:
-            if ticker == "MARKET":
-                display_ticker = active_label
-                display_label = "Market (QQQ / QQQ Futures)"
-                state_for_card = market_state_map["MARKET"]
-                show_state = False
-            else:
-                display_ticker = ticker
-                display_label = label
-                state_for_card = market_state_map[ticker]
-                show_state = True
-
-            st.markdown(
-                render_card(display_label, display_ticker, status_map[ticker], state_for_card, show_state, current_theme),
-                unsafe_allow_html=True,
-            )
-
-st.markdown("### Global Indices Pulse")
-
-for i in range(0, len(GLOBAL_INDICES), cards_per_row):
-    row = GLOBAL_INDICES[i: i + cards_per_row]
-    cols = st.columns(len(row))
-    for (ticker, label), col in zip(row, cols):
-        with col:
-            st.markdown(
-                render_card(label, ticker, status_map[ticker], market_state_map[ticker], True, current_theme),
-                unsafe_allow_html=True,
-            )
-
-
-# -------------- TICKER UNIVERSES ------------------
 
 TOP_TECH_TICKERS = [
     "MSFT",
@@ -740,21 +597,22 @@ NASDAQ100_TICKERS = [
 
 FOCUS_TICKERS = ["NVDA", "TSM", "AMD", "AVGO", "AMKR", "PLTR", "META"]
 
+# -------------- STATUS MAPS ------------------
 
-# -------------- HELPERS FOR TABLES ------------------
+real_symbols = [t for t, _ in US_MACRO_ETFS if t != "MARKET"] + [t for t, _ in GLOBAL_INDICES]
+status_map = {sym: get_ticker_status(sym) for sym in real_symbols}
+status_map["MARKET"] = (active_mode, active_price, None, active_change_pct, active_arrow)
+
+market_state_map = {sym: get_market_state(sym) for sym in real_symbols}
+market_state_map["MARKET"] = get_market_state(active_symbol)
+
+# -------------- TABLE HELPERS ------------------
+
 
 def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
-    """
-    Text/emoji signal – RSI is informational only.
-    Logic uses:
-      - depth of drawdown
-      - 1M move
-      - forward P/E
-    """
     if pct_from_high is None:
         return "❔ Check data"
 
-    # Deep value pullback
     if (
         pct_from_high <= -30
         and (fpe is None or fpe <= 30)
@@ -762,15 +620,12 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     ):
         return "💚 Deep value pullback"
 
-    # Value watch
     if pct_from_high <= -15 and (fpe is None or fpe <= 35):
         return "🟡 Value watch"
 
-    # Momentum trend (RSI-free)
     if pct_1m is not None and pct_1m > 0 and pct_from_high >= -25:
         return "🔵 Momentum trend"
 
-    # Hot / extended
     if (
         pct_from_high >= -5
         and fpe is not None
@@ -783,15 +638,6 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
 
 
 def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
-    """
-    Numeric VM score 0–8 combining:
-      - Value (forward P/E)
-      - Drawdown depth
-      - 1M price action
-      - Hot penalty
-    """
-
-    # Value points
     if fpe is None:
         val_points = 1
     else:
@@ -804,7 +650,6 @@ def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
         else:
             val_points = 0
 
-    # Drawdown points
     dd_points = 0
     if pct_from_high is not None:
         if pct_from_high <= -40:
@@ -814,7 +659,6 @@ def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
         elif pct_from_high <= -20:
             dd_points = 1
 
-    # 1M momentum points
     mom_points = 0
     if pct_1m is not None:
         if pct_1m > 0:
@@ -825,7 +669,6 @@ def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
 
     score = val_points + dd_points + mom_points
 
-    # Hot penalty
     hot = False
     if (
         pct_from_high is not None
@@ -878,7 +721,6 @@ def rsi_zone_style(val):
     return "color: #ef4444; font-weight: 600;"
 
 
-# base colours for gradients
 RED = (239, 68, 68)
 BLACK = (0, 0, 0)
 GREEN = (34, 197, 94)
@@ -894,7 +736,6 @@ def _rgb_css(c):
 
 
 def color_tripolar(v, vmin, vmax):
-    # Palantir = no heatmap background at all (clean white tables)
     theme = st.session_state.get("theme", "Original")
     if theme == "Palantir":
         return ""
@@ -981,7 +822,6 @@ def get_stock_summary(tickers):
             except Exception:
                 market_cap = None
 
-            # Forward EPS / Fwd P/E
             fpe = None
             forward_eps = None
             try:
@@ -1054,7 +894,6 @@ def get_stock_summary(tickers):
     return pd.DataFrame(rows)
 
 
-# Column config, including VM Score
 BASE_COLUMN_CONFIG = {
     col: st.column_config.Column(width="fit")
     for col in [
@@ -1082,7 +921,6 @@ def build_column_config(columns):
     return cfg
 
 
-# styling for separate Price/%1D (used in Buy-Zone candidates)
 def price_style(row):
     val = row.get("% 1D", None)
     if pd.isna(val):
@@ -1104,7 +942,6 @@ def pct1d_style(val):
     return "color: #6b7280; font-weight: 600;"
 
 
-# Style for combined "Price & 1D" column
 def price_1d_style(val):
     if val is None or val == "–":
         return ""
@@ -1162,26 +999,107 @@ def vm_score_style(val):
     return ""
 
 
-# -------------- TABLE 1: TECH LEADERSHIP ------------------
+# -------------- MACRO RENDERING ------------------
 
-df = pd.DataFrame()
-df_ndx = pd.DataFrame()
 
-st.markdown("---")
-st.markdown("## Megacap & Core")
+def render_card(label, ticker_display, status_tuple, market_state: str, show_state: bool, theme: str):
+    mode, price, _, chg_pct, arrow = status_tuple
 
-focus_cols = st.columns([1, 1, 1])
-with focus_cols[1]:
-    st.markdown(
-        f"<p style='text-align:center; color:{accent}; font-weight:700; margin-bottom:0.25rem;'>Focus Table</p>",
-        unsafe_allow_html=True,
+    if theme == "Palantir":
+        card_bg = "#ffffff"
+        border = "#e5e7eb"
+        label_color = "#6b7280"
+    elif theme == "Bloomberg":
+        card_bg = "#020617"
+        border = "#1f2937"
+        label_color = "#9ca3af"
+    else:
+        card_bg = "#050505"
+        border = "#1f2933"
+        label_color = "#9ca3af"
+
+    if price is None or chg_pct is None:
+        html = (
+            f"<div style='border:1px solid {border}; padding:0.5rem; "
+            f"border-radius:{'0.25rem' if theme=='Bloomberg' else '0.75rem'}; "
+            f"background-color:{card_bg};'>"
+            f"<div style='font-size:0.8rem; color:{label_color};'>{label}</div>"
+            f"<div style='font-weight:600; color:{label_color};'>{ticker_display} data unavailable</div>"
+            f"</div>"
+        )
+        return html
+
+    if chg_pct > 0:
+        txt_color = "#22c55e"
+    elif chg_pct < 0:
+        txt_color = "#ef4444"
+    else:
+        txt_color = "#e5e5e5" if theme != "Palantir" else "#4b5563"
+
+    if show_state and market_state == "Closed":
+        state_html = "<span style='color:#ef4444;'> · Closed</span>"
+    else:
+        state_html = ""
+
+    html = (
+        f"<div style='border:1px solid {border}; padding:0.5rem; "
+        f"border-radius:{'0.25rem' if theme=='Bloomberg' else '0.75rem'}; "
+        f"background-color:{card_bg};'>"
+        f"<div style='font-size:0.8rem; color:{label_color};'>{label}</div>"
+        f"<div style='font-weight:600; color:{txt_color};'>"
+        f"{ticker_display} {arrow} ({chg_pct:+.2f}%)"
+        f"{state_html}"
+        f"</div>"
+        f"</div>"
     )
-    focus_mode = st.checkbox(" ", key="focus_mode", label_visibility="collapsed")
+    return html
 
-with st.spinner("📡 Fetching data for Tech leadership table..."):
-    df = get_stock_summary(TOP_TECH_TICKERS)
 
-if not df.empty:
+def render_macro_section(theme: str):
+    st.markdown("### US Macro & Sector Pulse")
+    cards_per_row = 4
+    for i in range(0, len(US_MACRO_ETFS), cards_per_row):
+        row = US_MACRO_ETFS[i: i + cards_per_row]
+        cols = st.columns(len(row))
+        for (ticker, label), col in zip(row, cols):
+            with col:
+                if ticker == "MARKET":
+                    display_ticker = active_label
+                    display_label = "Market (QQQ / QQQ Futures)"
+                    state_for_card = market_state_map["MARKET"]
+                    show_state = False
+                else:
+                    display_ticker = ticker
+                    display_label = label
+                    state_for_card = market_state_map[ticker]
+                    show_state = True
+
+                st.markdown(
+                    render_card(display_label, display_ticker, status_map[ticker], state_for_card, show_state, theme),
+                    unsafe_allow_html=True,
+                )
+
+    st.markdown("### Global Indices Pulse")
+    cards_per_row = 4
+    for i in range(0, len(GLOBAL_INDICES), cards_per_row):
+        row = GLOBAL_INDICES[i: i + cards_per_row]
+        cols = st.columns(len(row))
+        for (ticker, label), col in zip(row, cols):
+            with col:
+                st.markdown(
+                    render_card(label, ticker, status_map[ticker], market_state_map[ticker], True, theme),
+                    unsafe_allow_html=True,
+                )
+
+
+# -------------- TABLE RENDERERS ------------------
+
+
+def render_megacap_table(df: pd.DataFrame, accent: str, focus_mode: bool, height: int = 600):
+    if df.empty:
+        st.write("No data loaded.")
+        return
+
     df = df.set_index("Ticker")
 
     if focus_mode:
@@ -1260,25 +1178,16 @@ if not df.empty:
     st.dataframe(
         styled,
         width="stretch",
-        height=600,
+        height=height,
         column_config=column_config,
     )
-else:
-    st.write("No data loaded.")
 
 
-# -------------- TABLE 2: NASDAQ-100 DEEP DRAWDOWN ------------------
+def render_nasdaq_table(df_ndx: pd.DataFrame, focus_mode: bool, height: int = 600):
+    if df_ndx.empty:
+        st.write("No Nasdaq-100 data loaded.")
+        return
 
-st.markdown("---")
-st.markdown(
-    "<h2>NASDAQ 100 DEEP DRAWDOWN RADAR</h2>",
-    unsafe_allow_html=True,
-)
-
-with st.spinner("📡 Fetching Nasdaq-100 data..."):
-    df_ndx = get_stock_summary(NASDAQ100_TICKERS)
-
-if not df_ndx.empty:
     df_ndx = df_ndx.set_index("Ticker")
 
     if focus_mode:
@@ -1332,8 +1241,8 @@ if not df_ndx.empty:
         vmax = 0.0
         styled_ndx = styled_ndx.apply(
             lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
-                subset=[ndx_dist_col],
-                axis=0,
+            subset=[ndx_dist_col],
+            axis=0,
         )
 
     styled_ndx = styled_ndx.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
@@ -1353,20 +1262,12 @@ if not df_ndx.empty:
     st.dataframe(
         styled_ndx,
         width="stretch",
-        height=600,
+        height=height,
         column_config=ndx_column_config,
     )
-else:
-    st.write("No Nasdaq-100 data loaded.")
 
 
-# -------------- BUY-ZONE CANDIDATES ------------------
-
-st.markdown("---")
-st.markdown("## Buy-Zone Candidates (Screened by Your Rules)")
-
-
-def build_buy_candidates(df_tech, df_nasdaq):
+def build_buy_candidates(df_tech, df_nasdaq, focus_mode: bool):
     sources = []
     if buy_universe in ("Tech leaders only", "Both") and df_tech is not None and not df_tech.empty:
         sources.append(df_tech.copy())
@@ -1406,12 +1307,19 @@ def build_buy_candidates(df_tech, df_nasdaq):
     return candidates
 
 
-if df is not None and df_ndx is not None:
-    candidates = build_buy_candidates(df, df_ndx)
-else:
-    candidates = pd.DataFrame()
+def render_buy_zone(df, df_ndx, focus_mode: bool, height: int = 400):
+    if df is None or df_ndx is None:
+        st.write("No data for candidates.")
+        return
 
-if not candidates.empty:
+    candidates = build_buy_candidates(df, df_ndx, focus_mode)
+    if candidates.empty:
+        st.write(
+            "No tickers currently match your buy-zone criteria. "
+            "Loosen filters in the sidebar to widen the search."
+        )
+        return
+
     candidates["Price & 1D"] = candidates.apply(format_price_1d, axis=1)
 
     show_cols = [
@@ -1447,20 +1355,14 @@ if not candidates.empty:
     st.dataframe(
         cand_styled,
         width="stretch",
-        height=400,
-    )
-else:
-    st.write(
-        "No tickers currently match your buy-zone criteria. "
-        "Loosen filters in the sidebar to widen the search."
+        height=height,
     )
 
 
-# -------------- HOW TO READ THE SIGNALS ------------------
-
-st.markdown("---")
-st.markdown(
-    """
+def render_how_to():
+    st.markdown("---")
+    st.markdown(
+        """
 **VM Score (0–8) – combined value + drawdown + 1M price action, with hot penalty**  
 - Higher score = better blend of: **cheap / beaten-up / stabilising / not overheated**.  
 
@@ -1473,4 +1375,118 @@ st.markdown(
 
 **RSI Zone** is now informational only – for context, not used in the VM Score or filters.
 """
-)
+    )
+
+
+# -------------- FETCH CORE DATA ONCE ------------------
+
+with st.spinner("📡 Fetching data for Tech leadership & Nasdaq-100..."):
+    df_tech = get_stock_summary(TOP_TECH_TICKERS)
+    df_ndx = get_stock_summary(NASDAQ100_TICKERS)
+
+# -------------- LAYOUTS PER THEME ------------------
+
+
+def layout_original():
+    st.markdown("---")
+    render_macro_section("Original")
+
+    st.markdown("---")
+    st.markdown("## Megacap & Core")
+
+    focus_cols = st.columns([1, 1, 1])
+    with focus_cols[1]:
+        st.markdown(
+            f"<p style='text-align:center; color:{accent}; font-weight:700; margin-bottom:0.25rem;'>Focus Table</p>",
+            unsafe_allow_html=True,
+        )
+        focus_mode = st.checkbox(" ", key="focus_mode_orig", label_visibility="collapsed")
+
+    render_megacap_table(df_tech, accent, focus_mode, height=600)
+
+    st.markdown("---")
+    st.markdown(
+        "<h2>NASDAQ 100 DEEP DRAWDOWN RADAR</h2>",
+        unsafe_allow_html=True,
+    )
+    render_nasdaq_table(df_ndx, focus_mode, height=600)
+
+    st.markdown("---")
+    st.markdown("## Buy-Zone Candidates (Screened by Your Rules)")
+    render_buy_zone(df_tech, df_ndx, focus_mode, height=400)
+
+    render_how_to()
+
+
+def layout_palantir():
+    # Palantir: focus on decision table + buy zone on first screen
+    st.markdown("---")
+    st.markdown("### Portfolio Decision View")
+
+    # Single focus toggle for whole Palantir view
+    focus_mode = st.checkbox(
+        "Focus on NVDA / TSM / AMD / AVGO / AMKR / PLTR / META",
+        key="focus_mode_pltr",
+        value=True,
+    )
+
+    # Two-column: left = Megacap; right = Buy-zone
+    col_left, col_right = st.columns([1.3, 1])
+
+    with col_left:
+        st.markdown("#### Megacap & Core Table")
+        render_megacap_table(df_tech, accent, focus_mode, height=500)
+
+    with col_right:
+        st.markdown("#### Current Buy-Zone Screen")
+        render_buy_zone(df_tech, df_ndx, focus_mode, height=500)
+
+    # Macro context as a compact block below
+    st.markdown("---")
+    st.markdown("### Market Context Snapshot")
+    with st.container():
+        render_macro_section("Palantir")
+
+    # Explainer moved into an expander to feel like an appendix
+    with st.expander("How to interpret VM Score & Value Signals"):
+        render_how_to()
+
+
+def layout_bloomberg():
+    # Bloomberg: split-screen terminal layout
+    st.markdown("---")
+    col_left, col_right = st.columns([1, 1.4])
+
+    # Use one focus toggle for this whole layout
+    with col_right:
+        focus_mode = st.checkbox(
+            "Focus tickers only (NVDA, TSM, AMD, AVGO, AMKR, PLTR, META)",
+            key="focus_mode_bbg",
+            value=False,
+        )
+
+    with col_left:
+        st.markdown("#### Macro & Indices Monitor")
+        render_macro_section("Bloomberg")
+
+    with col_right:
+        st.markdown("#### Megacap & Core")
+        render_megacap_table(df_tech, accent, focus_mode, height=350)
+
+        st.markdown("#### Nasdaq-100 Deep Drawdown Radar")
+        render_nasdaq_table(df_ndx, focus_mode, height=350)
+
+        st.markdown("#### Buy-Zone Screener")
+        render_buy_zone(df_tech, df_ndx, focus_mode, height=300)
+
+    # No explainer text here – terminal mode is just screens
+
+
+# -------------- CHOOSE LAYOUT ------------------
+
+if current_theme == "Original":
+    layout_original()
+elif current_theme == "Palantir":
+    layout_palantir()
+else:  # Bloomberg
+    layout_bloomberg()
