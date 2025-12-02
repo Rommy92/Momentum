@@ -192,7 +192,7 @@ else:
 
 # -------------- THEME SETUP ------------------
 
-THEMES = ["Original", "Palantir", "Bloomberg"]
+THEMES = ["Original", "Modern", "Terminal"]
 
 if "theme" not in st.session_state:
     st.session_state["theme"] = "Original"
@@ -206,64 +206,99 @@ current_theme = st.session_state["theme"]
 
 
 def get_theme_css(theme: str, accent_color: str) -> str:
-    # Palantir: bright, clean, white, memo-style
-    if theme == "Palantir":
-        return """
+    # Modern: crazy glassmorphism + neon gradients
+    if theme == "Modern":
+        return f"""
         <style>
-        [data-testid="stAppViewContainer"] {
-            background-color: #f3f4f6 !important;
-            color: #111827 !important;
-        }
-        [data-testid="stSidebar"] {
-            background-color: #ffffff !important;
-            color: #111827 !important;
-            border-right: 1px solid #e5e7eb !important;
-        }
-        html, body, [class*="css"] {
-            color: #111827 !important;
-            background-color: #f3f4f6 !important;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
-        }
-        h1, h2 {
-            color: #0f172a !important;
-            text-shadow: none !important;
+        [data-testid="stAppViewContainer"] {{
+            background: radial-gradient(circle at 0% 0%, #0f172a 0, #020617 35%, #000000 100%) !important;
+            color: #e5e7eb !important;
+        }}
+        [data-testid="stSidebar"] {{
+            background: rgba(15,23,42,0.92) !important;
+            color: #e5e7eb !important;
+            border-right: 1px solid rgba(148,163,184,0.4) !important;
+            backdrop-filter: blur(18px);
+        }}
+        html, body, [class*="css"] {{
+            color: #e5e7eb !important;
+            background-color: transparent !important;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif !important;
+        }}
+        h1 {{
+            color: {accent_color} !important;
             text-align: center;
-            letter-spacing: 0.08em;
             text-transform: uppercase;
-        }
-        h3, h4 {
-            color: #374151 !important;
+            letter-spacing: 0.2em;
+            font-size: 1.1rem;
+        }}
+        h2 {{
+            color: #e5e7eb !important;
             text-align: left;
-            text-transform: uppercase;
-            font-size: 0.8rem;
+            font-size: 0.9rem;
             letter-spacing: 0.14em;
-        }
-        .block-container {
-            padding-top: 1.5rem !important;
-            padding-bottom: 1.5rem !important;
-            max-width: 1200px !important;
-        }
-        [data-testid="stDataFrame"] div[role="grid"] {
-            background-color: #ffffff !important;
-            color: #111827 !important;
-            border-radius: 0.75rem !important;
-            border: 1px solid #e5e7eb !important;
-        }
-        [data-testid="stDataFrame"] div[role="columnheader"] {
-            background-color: #f9fafb !important;
-            color: #4b5563 !important;
-            border-bottom: 1px solid #e5e7eb !important;
             text-transform: uppercase;
+        }}
+        h3, h4 {{
+            color: #a5b4fc !important;
+            text-align: left;
             font-size: 0.75rem;
-        }
-        [data-testid="stDataFrame"] div[role="cell"] {
-            border-bottom: 1px solid #e5e7eb !important;
-        }
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }}
+        .block-container {{
+            padding-top: 2.5rem !important;
+            padding-bottom: 1.5rem !important;
+            max-width: 1300px !important;
+        }}
+        .glass-panel {{
+            background: linear-gradient(135deg, rgba(15,23,42,0.9), rgba(30,64,175,0.78));
+            border-radius: 1.5rem;
+            border: 1px solid rgba(129,140,248,0.5);
+            box-shadow: 0 18px 60px rgba(15,23,42,0.85);
+            padding: 1rem 1.3rem;
+            backdrop-filter: blur(20px);
+        }}
+        .hero-kpi {{
+            border-radius: 1rem;
+            padding: 0.8rem 1rem;
+            background: radial-gradient(circle at 0% 0%, rgba(56,189,248,0.35), rgba(15,23,42,0.85));
+            border: 1px solid rgba(59,130,246,0.7);
+            box-shadow: 0 15px 40px rgba(15,23,42,0.9);
+        }}
+        .hero-label {{
+            font-size: 0.75rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: #9ca3af;
+        }}
+        .hero-value {{
+            font-size: 1.35rem;
+            font-weight: 700;
+        }}
+        [data-testid="stDataFrame"] div[role="grid"] {{
+            background: transparent !important;
+            color: #e5e7eb !important;
+            border-radius: 1rem !important;
+            border: 1px solid rgba(148,163,184,0.5) !important;
+            backdrop-filter: blur(16px);
+        }}
+        [data-testid="stDataFrame"] div[role="columnheader"] {{
+            background: rgba(15,23,42,0.95) !important;
+            color: #c7d2fe !important;
+            border-bottom: 1px solid rgba(148,163,184,0.8) !important;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 0.16em;
+        }}
+        [data-testid="stDataFrame"] div[role="cell"] {{
+            border-bottom: 1px solid rgba(31,41,55,0.7) !important;
+        }}
         </style>
         """
 
-    # Bloomberg: dark terminal, monospaced, yellow headers
-    if theme == "Bloomberg":
+    # Terminal: dark terminal, monospaced, yellow headers
+    if theme == "Terminal":
         return """
         <style>
         [data-testid="stAppViewContainer"] {
@@ -420,6 +455,9 @@ st.caption(
     f"<p style='text-align:center;'>Last updated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
     unsafe_allow_html=True,
 )
+
+# Push buttons a bit down so they are visible in Streamlit
+st.markdown("<div style='height:0.75rem;'></div>", unsafe_allow_html=True)
 
 theme_cols = st.columns(len(THEMES))
 for col, name in zip(theme_cols, THEMES):
@@ -728,7 +766,7 @@ GREEN = (34, 197, 94)
 
 def _blend(c_from, c_to, t: float):
     t = max(0.0, min(1.0, float(t)))
-    return tuple(int(round(cf + (ct - cf) * t)) for cf, ct in zip(c_from, c_to))
+    return tuple(int(round(cf + (ct -cf) * t)) for cf, ct in zip(c_from, c_to))
 
 
 def _rgb_css(c):
@@ -737,7 +775,8 @@ def _rgb_css(c):
 
 def color_tripolar(v, vmin, vmax):
     theme = st.session_state.get("theme", "Original")
-    if theme == "Palantir":
+    # For Modern, keep tables cleaner: no heatmap
+    if theme == "Modern":
         return ""
     if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
         return ""
@@ -758,7 +797,7 @@ def color_tripolar(v, vmin, vmax):
 
 def color_bipolar(v, vmin, vmax):
     theme = st.session_state.get("theme", "Original")
-    if theme == "Palantir":
+    if theme == "Modern":
         return ""
     if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
         return ""
@@ -1005,11 +1044,11 @@ def vm_score_style(val):
 def render_card(label, ticker_display, status_tuple, market_state: str, show_state: bool, theme: str):
     mode, price, _, chg_pct, arrow = status_tuple
 
-    if theme == "Palantir":
-        card_bg = "#ffffff"
-        border = "#e5e7eb"
-        label_color = "#6b7280"
-    elif theme == "Bloomberg":
+    if theme == "Modern":
+        card_bg = "rgba(15,23,42,0.95)"
+        border = "rgba(148,163,184,0.7)"
+        label_color = "#9ca3af"
+    elif theme == "Terminal":
         card_bg = "#020617"
         border = "#1f2937"
         label_color = "#9ca3af"
@@ -1021,7 +1060,7 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
     if price is None or chg_pct is None:
         html = (
             f"<div style='border:1px solid {border}; padding:0.5rem; "
-            f"border-radius:{'0.25rem' if theme=='Bloomberg' else '0.75rem'}; "
+            f"border-radius:{'0.25rem' if theme=='Terminal' else '0.75rem'}; "
             f"background-color:{card_bg};'>"
             f"<div style='font-size:0.8rem; color:{label_color};'>{label}</div>"
             f"<div style='font-weight:600; color:{label_color};'>{ticker_display} data unavailable</div>"
@@ -1034,7 +1073,7 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
     elif chg_pct < 0:
         txt_color = "#ef4444"
     else:
-        txt_color = "#e5e5e5" if theme != "Palantir" else "#4b5563"
+        txt_color = "#e5e5e5" if theme != "Modern" else "#cbd5f5"
 
     if show_state and market_state == "Closed":
         state_html = "<span style='color:#ef4444;'> · Closed</span>"
@@ -1043,7 +1082,7 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
 
     html = (
         f"<div style='border:1px solid {border}; padding:0.5rem; "
-        f"border-radius:{'0.25rem' if theme=='Bloomberg' else '0.75rem'}; "
+        f"border-radius:{'0.25rem' if theme=='Terminal' else '0.75rem'}; "
         f"background-color:{card_bg};'>"
         f"<div style='font-size:0.8rem; color:{label_color};'>{label}</div>"
         f"<div style='font-weight:600; color:{txt_color};'>"
@@ -1241,9 +1280,9 @@ def render_nasdaq_table(df_ndx: pd.DataFrame, focus_mode: bool, height: int = 60
         vmax = 0.0
         styled_ndx = styled_ndx.apply(
             lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
-            subset=[ndx_dist_col],
-            axis=0,
-        )
+                subset=[ndx_dist_col],
+                axis=0,
+            )
 
     styled_ndx = styled_ndx.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
     styled_ndx = styled_ndx.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
@@ -1384,6 +1423,61 @@ with st.spinner("📡 Fetching data for Tech leadership & Nasdaq-100..."):
     df_tech = get_stock_summary(TOP_TECH_TICKERS)
     df_ndx = get_stock_summary(NASDAQ100_TICKERS)
 
+# -------------- EXTRA HELPERS FOR MODERN HERO KPIs ------------------
+
+
+def get_row_for_ticker(df: pd.DataFrame, ticker: str):
+    if df is None or df.empty:
+        return None
+    try:
+        row = df[df["Ticker"] == ticker]
+        if row.empty:
+            return None
+        return row.iloc[0]
+    except Exception:
+        return None
+
+
+def render_hero_kpi(label: str, ticker: str, row: pd.Series | None, status_tuple=None):
+    # Uses .hero-kpi, .hero-label, .hero-value CSS in Modern
+    if ticker == "MARKET" and status_tuple is not None:
+        mode, price, _, chg_pct, arrow = status_tuple
+        if price is None or chg_pct is None:
+            body = "<span class='hero-value'>–</span>"
+            sub = ""
+        else:
+            body = f"<span class='hero-value'>{ticker} {arrow} {chg_pct:+.2f}%</span>"
+            sub = f"<div style='font-size:0.75rem; color:#9ca3af;'>Spot: ${price:,.2f}</div>"
+    else:
+        if row is None:
+            body = "<span class='hero-value'>–</span>"
+            sub = ""
+        else:
+            price = row.get("Price", None)
+            pct_1d = row.get("% 1D", None)
+            pct_52 = row.get("% from 52w High", None)
+            if pd.isna(price):
+                body = "<span class='hero-value'>–</span>"
+            else:
+                if pd.isna(pct_1d):
+                    body = f"<span class='hero-value'>{ticker} ${price:,.2f}</span>"
+                else:
+                    body = f"<span class='hero-value'>{ticker} ${price:,.2f} ({pct_1d:+.1f}%)</span>"
+            if pd.isna(pct_52):
+                sub = ""
+            else:
+                sub = f"<div style='font-size:0.75rem; color:#9ca3af;'>From 52w High: {pct_52:.1f}%</div>"
+
+    html = f"""
+    <div class="hero-kpi">
+        <div class="hero-label">{label}</div>
+        {body}
+        {sub}
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
 # -------------- LAYOUTS PER THEME ------------------
 
 
@@ -1418,56 +1512,113 @@ def layout_original():
     render_how_to()
 
 
-def layout_palantir():
-    # Palantir: focus on decision table + buy zone on first screen
+def layout_modern():
+    # Modern: crazy glass cockpit with hero KPIs
     st.markdown("---")
-    st.markdown("### Portfolio Decision View")
+    st.markdown(
+        "<div class='glass-panel'>"
+        "<div style='font-size:0.75rem; letter-spacing:0.22em; text-transform:uppercase; "
+        "color:#9ca3af; margin-bottom:0.4rem;'>Modern Mode · AI & Semis Command</div>"
+        "<div style='font-size:0.95rem; font-weight:600; color:#e5e7eb;'>"
+        "Today’s risk / opportunity snapshot"
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
-    # Single focus toggle for whole Palantir view
     focus_mode = st.checkbox(
-        "Focus on NVDA / TSM / AMD / AVGO / AMKR / PLTR / META",
-        key="focus_mode_pltr",
+        "Hyper-focus on AI & Semis (NVDA, TSM, AMD, AVGO, AMKR, PLTR, META)",
+        key="focus_mode_modern",
         value=True,
     )
 
-    # Two-column: left = Megacap; right = Buy-zone
-    col_left, col_right = st.columns([1.3, 1])
+    # Hero KPIs row
+    st.markdown("<div style='margin-top:0.6rem;'></div>", unsafe_allow_html=True)
+    hero_cols = st.columns([1.1, 1, 1])
+
+    with hero_cols[0]:
+        render_hero_kpi(
+            label="Market Driver (QQQ / Futures)",
+            ticker="MARKET",
+            row=None,
+            status_tuple=status_map["MARKET"],
+        )
+
+    nvda_row = get_row_for_ticker(df_tech, "NVDA")
+    tsm_row = get_row_for_ticker(df_tech, "TSM")
+
+    with hero_cols[1]:
+        render_hero_kpi(
+            label="Core AI Engine",
+            ticker="NVDA",
+            row=nvda_row,
+        )
+    with hero_cols[2]:
+        render_hero_kpi(
+            label="Foundry Backbone",
+            ticker="TSM",
+            row=tsm_row,
+        )
+
+    # Main cockpit: left = Megacap, right = Buy-Zone
+    st.markdown("<div style='margin-top:0.9rem;'></div>", unsafe_allow_html=True)
+    col_left, col_right = st.columns([1.4, 1])
 
     with col_left:
-        st.markdown("#### Megacap & Core Table")
-        render_megacap_table(df_tech, accent, focus_mode, height=500)
+        st.markdown(
+            "<div class='glass-panel'>"
+            "<div style='font-size:0.75rem; letter-spacing:0.18em; text-transform:uppercase; "
+            "color:#9ca3af; margin-bottom:0.4rem;'>Megacap & Core</div>"
+            "<div style='font-size:0.9rem; color:#e5e7eb; margin-bottom:0.6rem;'>"
+            "Stack-ranked by market cap, with VM score and 52w damage."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        render_megacap_table(df_tech, accent, focus_mode, height=430)
 
     with col_right:
-        st.markdown("#### Current Buy-Zone Screen")
-        render_buy_zone(df_tech, df_ndx, focus_mode, height=500)
+        st.markdown(
+            "<div class='glass-panel'>"
+            "<div style='font-size:0.75rem; letter-spacing:0.18em; text-transform:uppercase; "
+            "color:#9ca3af; margin-bottom:0.4rem;'>Live Buy-Zone Screen</div>"
+            "<div style='font-size:0.9rem; color:#e5e7eb; margin-bottom:0.4rem;'>"
+            "Current names matching your downside & valuation rules."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        render_buy_zone(df_tech, df_ndx, focus_mode, height=430)
 
-    # Macro context as a compact block below
-    st.markdown("---")
-    st.markdown("### Market Context Snapshot")
-    with st.container():
-        render_macro_section("Palantir")
+    # Macro context panel at bottom
+    st.markdown("<div style='margin-top:1.2rem;'></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='glass-panel'>"
+        "<div style='font-size:0.75rem; letter-spacing:0.18em; text-transform:uppercase; "
+        "color:#9ca3af; margin-bottom:0.5rem;'>Macro Backdrop</div>",
+        unsafe_allow_html=True,
+    )
+    render_macro_section("Modern")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    # Explainer moved into an expander to feel like an appendix
-    with st.expander("How to interpret VM Score & Value Signals"):
+    # VM explainer in expander
+    with st.expander("How this engine thinks (VM Score & Value Signals)"):
         render_how_to()
 
 
-def layout_bloomberg():
-    # Bloomberg: split-screen terminal layout
+def layout_terminal():
+    # Terminal: split-screen terminal layout
     st.markdown("---")
     col_left, col_right = st.columns([1, 1.4])
 
-    # Use one focus toggle for this whole layout
     with col_right:
         focus_mode = st.checkbox(
             "Focus tickers only (NVDA, TSM, AMD, AVGO, AMKR, PLTR, META)",
-            key="focus_mode_bbg",
+            key="focus_mode_terminal",
             value=False,
         )
 
     with col_left:
         st.markdown("#### Macro & Indices Monitor")
-        render_macro_section("Bloomberg")
+        render_macro_section("Terminal")
 
     with col_right:
         st.markdown("#### Megacap & Core")
@@ -1478,7 +1629,6 @@ def layout_bloomberg():
 
         st.markdown("#### Buy-Zone Screener")
         render_buy_zone(df_tech, df_ndx, focus_mode, height=300)
-
     # No explainer text here – terminal mode is just screens
 
 
@@ -1486,7 +1636,7 @@ def layout_bloomberg():
 
 if current_theme == "Original":
     layout_original()
-elif current_theme == "Palantir":
-    layout_palantir()
-else:  # Bloomberg
-    layout_bloomberg()
+elif current_theme == "Modern":
+    layout_modern()
+else:  # Terminal
+    layout_terminal()
