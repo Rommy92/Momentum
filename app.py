@@ -193,75 +193,215 @@ else:
     accent = "#0ea5e9"
 
 
-# -------------- CYBERPUNK CSS ------------------
+# -------------- THEME SWITCHER ------------------
 
-cyberpunk_css = f"""
-<style>
-[data-testid="stAppViewContainer"] {{
-    background-color: #000000 !important;
-    color: #eeeeee !important;
-}}
+THEMES = ["Original", "Palantir", "Bloomberg"]
 
-[data-testid="stSidebar"] {{
-    background-color: #000000 !important;
-    color: #eeeeee !important;
-    border-right: 1px solid {accent}33 !important;
-}}
+if "theme" not in st.session_state:
+    st.session_state["theme"] = "Original"
 
-html, body, [class*="css"] {{
-    color: #eeeeee !important;
-    background-color: #000000 !important;
-}}
 
-h1, h2 {{
-    color: {accent} !important;
-    text-shadow: 0 0 4px {accent}, 0 0 10px {accent};
-    animation: neonPulse 3s ease-in-out infinite;
-    text-align: center;
-}}
+def set_theme(name: str):
+    st.session_state["theme"] = name
 
-h3, h4 {{
-    color: {accent} !important;
-    text-align: center;
-}}
 
-@keyframes neonPulse {{
-    0% {{
-        text-shadow: 0 0 4px {accent}, 0 0 8px {accent};
+theme_cols = st.columns(len(THEMES))
+for col, name in zip(theme_cols, THEMES):
+    with col:
+        is_current = st.session_state["theme"] == name
+        label = f"✅ {name}" if is_current else name
+        st.button(
+            label,
+            key=f"theme_{name}",
+            on_click=set_theme,
+            args=(name,),
+            use_container_width=True,
+        )
+
+current_theme = st.session_state["theme"]
+
+
+# -------------- THEME CSS ------------------
+
+
+def get_theme_css(theme: str, accent_color: str) -> str:
+    if theme == "Palantir":
+        return f"""
+        <style>
+        [data-testid="stAppViewContainer"] {{
+            background-color: #f5f5f5 !important;
+            color: #111827 !important;
+        }}
+
+        [data-testid="stSidebar"] {{
+            background-color: #ffffff !important;
+            color: #111827 !important;
+            border-right: 1px solid #e5e7eb !important;
+        }}
+
+        html, body, [class*="css"] {{
+            color: #111827 !important;
+            background-color: #f5f5f5 !important;
+        }}
+
+        h1, h2 {{
+            color: #0f172a !important;
+            text-shadow: none !important;
+            text-align: center;
+        }}
+
+        h3, h4 {{
+            color: #374151 !important;
+            text-align: center;
+        }}
+
+        .block-container {{
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
+            max-width: 1200px !important;
+        }}
+
+        [data-testid="stDataFrame"] div[role="grid"] {{
+            background-color: #ffffff !important;
+            color: #111827 !important;
+        }}
+
+        [data-testid="stDataFrame"] div[role="columnheader"] {{
+            background-color: #f3f4f6 !important;
+            color: #374151 !important;
+            border-bottom: 1px solid #e5e7eb !important;
+        }}
+
+        [data-testid="stDataFrame"] div[role="cell"] {{
+            border-bottom: 1px solid #e5e7eb !important;
+        }}
+        </style>
+        """
+
+    if theme == "Bloomberg":
+        return f"""
+        <style>
+        [data-testid="stAppViewContainer"] {{
+            background-color: #020617 !important;
+            color: #e5e7eb !important;
+        }}
+
+        [data-testid="stSidebar"] {{
+            background-color: #020617 !important;
+            color: #e5e7eb !important;
+            border-right: 1px solid #1f2937 !important;
+        }}
+
+        html, body, [class*="css"] {{
+            color: #e5e7eb !important;
+            background-color: #020617 !important;
+        }}
+
+        h1, h2 {{
+            color: #eab308 !important;
+            text-shadow: none !important;
+            text-align: center;
+        }}
+
+        h3, h4 {{
+            color: #9ca3af !important;
+            text-align: center;
+        }}
+
+        .block-container {{
+            padding-top: 1rem !important;
+            padding-bottom: 1rem !important;
+            max-width: 100% !important;
+        }}
+
+        [data-testid="stDataFrame"] div[role="grid"] {{
+            background-color: #020617 !important;
+            color: #e5e7eb !important;
+        }}
+
+        [data-testid="stDataFrame"] div[role="columnheader"] {{
+            background-color: #030712 !important;
+            color: #eab308 !important;
+            border-bottom: 1px solid #1f2937 !important;
+        }}
+
+        [data-testid="stDataFrame"] div[role="cell"] {{
+            border-bottom: 1px solid #111827 !important;
+        }}
+        </style>
+        """
+
+    # Original (Cyberpunk)
+    return f"""
+    <style>
+    [data-testid="stAppViewContainer"] {{
+        background-color: #000000 !important;
+        color: #eeeeee !important;
     }}
-    50% {{
-        text-shadow: 0 0 12px {accent}, 0 0 22px {accent};
+
+    [data-testid="stSidebar"] {{
+        background-color: #000000 !important;
+        color: #eeeeee !important;
+        border-right: 1px solid {accent_color}33 !important;
     }}
-    100% {{
-        text-shadow: 0 0 4px {accent}, 0 0 8px {accent};
+
+    html, body, [class*="css"] {{
+        color: #eeeeee !important;
+        background-color: #000000 !important;
     }}
-}}
 
-.block-container {{
-    padding-top: 1rem !important;
-    padding-bottom: 1rem !important;
-    padding-left: 0rem !important;
-    padding-right: 0rem !important;
-    max-width: 100% !important;
-}}
+    h1, h2 {{
+        color: {accent_color} !important;
+        text-shadow: 0 0 4px {accent_color}, 0 0 10px {accent_color};
+        animation: neonPulse 3s ease-in-out infinite;
+        text-align: center;
+    }}
 
-[data-testid="stDataFrame"] div[role="grid"] {{
-    background-color: #050505 !important;
-    color: #ffffff !important;
-}}
+    h3, h4 {{
+        color: {accent_color} !important;
+        text-align: center;
+    }}
 
-[data-testid="stDataFrame"] div[role="columnheader"] {{
-    background-color: #101010 !important;
-    color: {accent} !important;
-    border-bottom: 1px solid {accent}77 !important;
-}}
+    @keyframes neonPulse {{
+        0% {{
+            text-shadow: 0 0 4px {accent_color}, 0 0 8px {accent_color};
+        }}
+        50% {{
+            text-shadow: 0 0 12px {accent_color}, 0 0 22px {accent_color};
+        }}
+        100% {{
+            text-shadow: 0 0 4px {accent_color}, 0 0 8px {accent_color};
+        }}
+    }}
 
-[data-testid="stDataFrame"] div[role="cell"] {{
-    border-bottom: 1px solid #222222 !important;
-}}
-</style>
-"""
-st.markdown(cyberpunk_css, unsafe_allow_html=True)
+    .block-container {{
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+        padding-left: 0rem !important;
+        padding-right: 0rem !important;
+        max-width: 100% !important;
+    }}
+
+    [data-testid="stDataFrame"] div[role="grid"] {{
+        background-color: #050505 !important;
+        color: #ffffff !important;
+    }}
+
+    [data-testid="stDataFrame"] div[role="columnheader"] {{
+        background-color: #101010 !important;
+        color: {accent_color} !important;
+        border-bottom: 1px solid {accent_color}77 !important;
+    }}
+
+    [data-testid="stDataFrame"] div[role="cell"] {{
+        border-bottom: 1px solid #222222 !important;
+    }}
+    </style>
+    """
+
+
+theme_css = get_theme_css(current_theme, accent)
+st.markdown(theme_css, unsafe_allow_html=True)
 
 
 # -------------- SIDEBAR: BUY-ZONE FILTER CONTROLS ------------------
@@ -341,21 +481,37 @@ market_state_map["MARKET"] = get_market_state(active_symbol)
 st.markdown("### US Macro & Sector Pulse")
 
 
-def render_card(label, ticker_display, status_tuple, market_state: str, show_state: bool):
+def render_card(label, ticker_display, status_tuple, market_state: str, show_state: bool, theme: str):
     """
     Card renderer.
 
     - Colours label by % move.
     - If show_state is True and market_state == 'Closed' -> appends red '· Closed'.
     - Never prints 'Open' anywhere.
+    - Adapts background/border to theme.
     """
     mode, price, _, chg_pct, arrow = status_tuple
+
+    # Theme-specific card styling
+    if theme == "Palantir":
+        card_bg = "#ffffff"
+        border = "#e5e7eb"
+        label_color = "#6b7280"
+    elif theme == "Bloomberg":
+        card_bg = "#020617"
+        border = "#1f2937"
+        label_color = "#9ca3af"
+    else:  # Original
+        card_bg = "#050505"
+        border = "#1f2933"
+        label_color = "#9ca3af"
+
     if price is None or chg_pct is None:
         html = (
-            f"<div style='border:1px solid #1f2933; padding:0.5rem; "
-            f"border-radius:0.75rem; background-color:#050505;'>"
-            f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
-            f"<div style='font-weight:600; color:#9ca3af;'>{ticker_display} data unavailable</div>"
+            f"<div style='border:1px solid {border}; padding:0.5rem; "
+            f"border-radius:0.75rem; background-color:{card_bg};'>"
+            f"<div style='font-size:0.8rem; color:{label_color};'>{label}</div>"
+            f"<div style='font-weight:600; color:{label_color};'>{ticker_display} data unavailable</div>"
             f"</div>"
         )
         return html
@@ -365,7 +521,7 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
     elif chg_pct < 0:
         txt_color = "#ef4444"
     else:
-        txt_color = "#e5e5e5"
+        txt_color = "#e5e5e5" if theme != "Palantir" else "#4b5563"
 
     if show_state and market_state == "Closed":
         state_html = "<span style='color:#ef4444;'> · Closed</span>"
@@ -373,9 +529,9 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
         state_html = ""
 
     html = (
-        f"<div style='border:1px solid #1f2933; padding:0.5rem; "
-        f"border-radius:0.75rem; background-color:#050505;'>"
-        f"<div style='font-size:0.8rem; color:#9ca3af;'>{label}</div>"
+        f"<div style='border:1px solid {border}; padding:0.5rem; "
+        f"border-radius:0.75rem; background-color:{card_bg};'>"
+        f"<div style='font-size:0.8rem; color:{label_color};'>{label}</div>"
         f"<div style='font-weight:600; color:{txt_color};'>"
         f"{ticker_display} {arrow} ({chg_pct:+.2f}%)"
         f"{state_html}"
@@ -403,7 +559,7 @@ for i in range(0, len(US_MACRO_ETFS), cards_per_row):
                 show_state = True
 
             st.markdown(
-                render_card(display_label, display_ticker, status_map[ticker], state_for_card, show_state),
+                render_card(display_label, display_ticker, status_map[ticker], state_for_card, show_state, current_theme),
                 unsafe_allow_html=True,
             )
 
@@ -415,7 +571,7 @@ for i in range(0, len(GLOBAL_INDICES), cards_per_row):
     for (ticker, label), col in zip(row, cols):
         with col:
             st.markdown(
-                render_card(label, ticker, status_map[ticker], market_state_map[ticker], True),
+                render_card(label, ticker, status_map[ticker], market_state_map[ticker], True, current_theme),
                 unsafe_allow_html=True,
             )
 
@@ -1313,4 +1469,3 @@ st.markdown(
 **RSI Zone** is now informational only – for context, not used in the VM Score or filters.
 """
 )
-
