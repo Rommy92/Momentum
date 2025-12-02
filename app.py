@@ -192,10 +192,11 @@ else:
 
 # -------------- THEME SETUP ------------------
 
-THEMES = ["Original", "Modern", "Terminal"]
+THEMES = ["Terminal", "Modern", "Original"]
 
 if "theme" not in st.session_state:
-    st.session_state["theme"] = "Original"
+    # Default theme: Terminal
+    st.session_state["theme"] = "Terminal"
 
 
 def set_theme(name: str):
@@ -206,19 +207,26 @@ current_theme = st.session_state["theme"]
 
 
 def get_theme_css(theme: str, accent_color: str) -> str:
-    # Modern: crazy glassmorphism + neon gradients
+    # Modern: brutalist Palantir energy
     if theme == "Modern":
         return f"""
         <style>
         [data-testid="stAppViewContainer"] {{
-            background: radial-gradient(circle at 0% 0%, #0f172a 0, #020617 35%, #000000 100%) !important;
+            background:
+                radial-gradient(circle at 0% 0%, #111827 0, #020617 35%, #000000 100%),
+                repeating-linear-gradient(
+                    135deg,
+                    rgba(30,64,175,0.16) 0px,
+                    rgba(30,64,175,0.16) 1px,
+                    transparent 1px,
+                    transparent 10px
+                ) !important;
             color: #e5e7eb !important;
         }}
         [data-testid="stSidebar"] {{
-            background: rgba(15,23,42,0.92) !important;
+            background: #020617 !important;
             color: #e5e7eb !important;
-            border-right: 1px solid rgba(148,163,184,0.4) !important;
-            backdrop-filter: blur(18px);
+            border-right: 1px solid rgba(148,163,184,0.5) !important;
         }}
         html, body, [class*="css"] {{
             color: #e5e7eb !important;
@@ -226,73 +234,99 @@ def get_theme_css(theme: str, accent_color: str) -> str:
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif !important;
         }}
         h1 {{
-            color: {accent_color} !important;
+            color: #f9fafb !important;
             text-align: center;
             text-transform: uppercase;
-            letter-spacing: 0.2em;
-            font-size: 1.1rem;
+            letter-spacing: 0.22em;
+            font-size: 0.95rem;
+            border-bottom: 2px solid #ef4444;
+            padding-bottom: 0.35rem;
+            margin-bottom: 0.2rem;
         }}
         h2 {{
             color: #e5e7eb !important;
             text-align: left;
-            font-size: 0.9rem;
-            letter-spacing: 0.14em;
+            font-size: 0.8rem;
+            letter-spacing: 0.18em;
             text-transform: uppercase;
         }}
         h3, h4 {{
-            color: #a5b4fc !important;
+            color: #f97316 !important;
             text-align: left;
             font-size: 0.75rem;
             letter-spacing: 0.18em;
             text-transform: uppercase;
         }}
         .block-container {{
-            padding-top: 2.5rem !important;
+            padding-top: 2.2rem !important;
             padding-bottom: 1.5rem !important;
-            max-width: 1300px !important;
+            max-width: 1350px !important;
         }}
-        .glass-panel {{
-            background: linear-gradient(135deg, rgba(15,23,42,0.9), rgba(30,64,175,0.78));
-            border-radius: 1.5rem;
-            border: 1px solid rgba(129,140,248,0.5);
-            box-shadow: 0 18px 60px rgba(15,23,42,0.85);
-            padding: 1rem 1.3rem;
-            backdrop-filter: blur(20px);
+        .modern-panel {{
+            background: #020617;
+            border-radius: 1.2rem;
+            border: 1px solid rgba(148,163,184,0.6);
+            box-shadow:
+                0 18px 40px rgba(0,0,0,0.95),
+                0 0 0 1px rgba(15,23,42,0.85);
+            padding: 0.9rem 1.1rem;
+            position: relative;
+            overflow: hidden;
+        }}
+        .modern-panel::before {{
+            content: "";
+            position: absolute;
+            inset: -40%;
+            background:
+                radial-gradient(circle at 0 0, rgba(239,68,68,0.14), transparent 55%),
+                radial-gradient(circle at 100% 100%, rgba(59,130,246,0.15), transparent 60%);
+            opacity: 0.7;
+            pointer-events: none;
+        }}
+        .modern-panel-inner {{
+            position: relative;
+            z-index: 1;
         }}
         .hero-kpi {{
-            border-radius: 1rem;
-            padding: 0.8rem 1rem;
-            background: radial-gradient(circle at 0% 0%, rgba(56,189,248,0.35), rgba(15,23,42,0.85));
-            border: 1px solid rgba(59,130,246,0.7);
-            box-shadow: 0 15px 40px rgba(15,23,42,0.9);
+            border-radius: 0.9rem;
+            padding: 0.7rem 0.9rem;
+            background: linear-gradient(135deg, #020617, #020617);
+            border: 1px solid rgba(249,115,22,0.6);
+            box-shadow:
+                0 12px 40px rgba(0,0,0,0.95),
+                0 0 0 1px rgba(15,23,42,0.9);
         }}
         .hero-label {{
-            font-size: 0.75rem;
-            letter-spacing: 0.18em;
+            font-size: 0.72rem;
+            letter-spacing: 0.22em;
             text-transform: uppercase;
             color: #9ca3af;
         }}
         .hero-value {{
-            font-size: 1.35rem;
+            font-size: 1.3rem;
             font-weight: 700;
+            color: #f9fafb;
+        }}
+        .hero-sub {{
+            font-size: 0.72rem;
+            color: #6b7280;
         }}
         [data-testid="stDataFrame"] div[role="grid"] {{
-            background: transparent !important;
+            background: #020617 !important;
             color: #e5e7eb !important;
-            border-radius: 1rem !important;
-            border: 1px solid rgba(148,163,184,0.5) !important;
-            backdrop-filter: blur(16px);
+            border-radius: 0.9rem !important;
+            border: 1px solid rgba(75,85,99,0.9) !important;
         }}
         [data-testid="stDataFrame"] div[role="columnheader"] {{
-            background: rgba(15,23,42,0.95) !important;
-            color: #c7d2fe !important;
-            border-bottom: 1px solid rgba(148,163,184,0.8) !important;
+            background: #020617 !important;
+            color: #e5e7eb !important;
+            border-bottom: 1px solid rgba(55,65,81,0.95) !important;
             text-transform: uppercase;
             font-size: 0.7rem;
-            letter-spacing: 0.16em;
+            letter-spacing: 0.13em;
         }}
         [data-testid="stDataFrame"] div[role="cell"] {{
-            border-bottom: 1px solid rgba(31,41,55,0.7) !important;
+            border-bottom: 1px solid #0f172a !important;
         }}
         </style>
         """
@@ -766,7 +800,7 @@ GREEN = (34, 197, 94)
 
 def _blend(c_from, c_to, t: float):
     t = max(0.0, min(1.0, float(t)))
-    return tuple(int(round(cf + (ct -cf) * t)) for cf, ct in zip(c_from, c_to))
+    return tuple(int(round(cf + (ct - cf) * t)) for cf, ct in zip(c_from, c_to))
 
 
 def _rgb_css(c):
@@ -775,7 +809,7 @@ def _rgb_css(c):
 
 def color_tripolar(v, vmin, vmax):
     theme = st.session_state.get("theme", "Original")
-    # For Modern, keep tables cleaner: no heatmap
+    # For Modern, keep tables visually cleaner (no gradient heatmap)
     if theme == "Modern":
         return ""
     if pd.isna(v) or vmin is None or vmax is None or vmin == vmax:
@@ -1045,8 +1079,8 @@ def render_card(label, ticker_display, status_tuple, market_state: str, show_sta
     mode, price, _, chg_pct, arrow = status_tuple
 
     if theme == "Modern":
-        card_bg = "rgba(15,23,42,0.95)"
-        border = "rgba(148,163,184,0.7)"
+        card_bg = "#020617"
+        border = "rgba(75,85,99,0.95)"
         label_color = "#9ca3af"
     elif theme == "Terminal":
         card_bg = "#020617"
@@ -1280,9 +1314,9 @@ def render_nasdaq_table(df_ndx: pd.DataFrame, focus_mode: bool, height: int = 60
         vmax = 0.0
         styled_ndx = styled_ndx.apply(
             lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
-                subset=[ndx_dist_col],
-                axis=0,
-            )
+            subset=[ndx_dist_col],
+            axis=0,
+        )
 
     styled_ndx = styled_ndx.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
     styled_ndx = styled_ndx.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
@@ -1417,11 +1451,10 @@ def render_how_to():
     )
 
 
-# -------------- FETCH CORE DATA ONCE ------------------
+# -------------- FETCH CORE DATA ONCE (CACHED, NO SPINNER) ------------------
 
-with st.spinner("📡 Fetching data for Tech leadership & Nasdaq-100..."):
-    df_tech = get_stock_summary(TOP_TECH_TICKERS)
-    df_ndx = get_stock_summary(NASDAQ100_TICKERS)
+df_tech = get_stock_summary(TOP_TECH_TICKERS)
+df_ndx = get_stock_summary(NASDAQ100_TICKERS)
 
 # -------------- EXTRA HELPERS FOR MODERN HERO KPIs ------------------
 
@@ -1447,7 +1480,7 @@ def render_hero_kpi(label: str, ticker: str, row: pd.Series | None, status_tuple
             sub = ""
         else:
             body = f"<span class='hero-value'>{ticker} {arrow} {chg_pct:+.2f}%</span>"
-            sub = f"<div style='font-size:0.75rem; color:#9ca3af;'>Spot: ${price:,.2f}</div>"
+            sub = f"<div class='hero-sub'>Spot: ${price:,.2f}</div>"
     else:
         if row is None:
             body = "<span class='hero-value'>–</span>"
@@ -1466,7 +1499,7 @@ def render_hero_kpi(label: str, ticker: str, row: pd.Series | None, status_tuple
             if pd.isna(pct_52):
                 sub = ""
             else:
-                sub = f"<div style='font-size:0.75rem; color:#9ca3af;'>From 52w High: {pct_52:.1f}%</div>"
+                sub = f"<div class='hero-sub'>From 52w High: {pct_52:.1f}%</div>"
 
     html = f"""
     <div class="hero-kpi">
@@ -1513,16 +1546,22 @@ def layout_original():
 
 
 def layout_modern():
-    # Modern: crazy glass cockpit with hero KPIs
+    # Modern: brutalist cockpit with hero KPIs and hard panels
     st.markdown("---")
     st.markdown(
-        "<div class='glass-panel'>"
-        "<div style='font-size:0.75rem; letter-spacing:0.22em; text-transform:uppercase; "
-        "color:#9ca3af; margin-bottom:0.4rem;'>Modern Mode · AI & Semis Command</div>"
-        "<div style='font-size:0.95rem; font-weight:600; color:#e5e7eb;'>"
-        "Today’s risk / opportunity snapshot"
-        "</div>"
-        "</div>",
+        """
+        <div class="modern-panel">
+          <div class="modern-panel-inner">
+            <div style="font-size:0.7rem; letter-spacing:0.26em; text-transform:uppercase;
+                        color:#9ca3af; margin-bottom:0.35rem;">
+              Modern Mode · Systemic Risk Console
+            </div>
+            <div style="font-size:0.9rem; color:#f9fafb;">
+              Core AI & semiconductor stack, filtered by your downside and valuation rules.
+            </div>
+          </div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -1533,7 +1572,7 @@ def layout_modern():
     )
 
     # Hero KPIs row
-    st.markdown("<div style='margin-top:0.6rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:0.8rem;'></div>", unsafe_allow_html=True)
     hero_cols = st.columns([1.1, 1, 1])
 
     with hero_cols[0]:
@@ -1561,43 +1600,63 @@ def layout_modern():
         )
 
     # Main cockpit: left = Megacap, right = Buy-Zone
-    st.markdown("<div style='margin-top:0.9rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:1.1rem;'></div>", unsafe_allow_html=True)
     col_left, col_right = st.columns([1.4, 1])
 
     with col_left:
         st.markdown(
-            "<div class='glass-panel'>"
-            "<div style='font-size:0.75rem; letter-spacing:0.18em; text-transform:uppercase; "
-            "color:#9ca3af; margin-bottom:0.4rem;'>Megacap & Core</div>"
-            "<div style='font-size:0.9rem; color:#e5e7eb; margin-bottom:0.6rem;'>"
-            "Stack-ranked by market cap, with VM score and 52w damage."
-            "</div>",
+            """
+            <div class="modern-panel">
+              <div class="modern-panel-inner">
+                <div style="font-size:0.72rem; letter-spacing:0.2em; text-transform:uppercase;
+                            color:#9ca3af; margin-bottom:0.35rem;">
+                  Megacap & Core
+                </div>
+                <div style="font-size:0.85rem; color:#e5e7eb; margin-bottom:0.45rem;">
+                  Ranked by market cap with VM score and 52w damage. This is the stack that matters.
+                </div>
+              </div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
         render_megacap_table(df_tech, accent, focus_mode, height=430)
 
     with col_right:
         st.markdown(
-            "<div class='glass-panel'>"
-            "<div style='font-size:0.75rem; letter-spacing:0.18em; text-transform:uppercase; "
-            "color:#9ca3af; margin-bottom:0.4rem;'>Live Buy-Zone Screen</div>"
-            "<div style='font-size:0.9rem; color:#e5e7eb; margin-bottom:0.4rem;'>"
-            "Current names matching your downside & valuation rules."
-            "</div>",
+            """
+            <div class="modern-panel">
+              <div class="modern-panel-inner">
+                <div style="font-size:0.72rem; letter-spacing:0.2em; text-transform:uppercase;
+                            color:#9ca3af; margin-bottom:0.35rem;">
+                  Live Buy-Zone Screen
+                </div>
+                <div style="font-size:0.85rem; color:#e5e7eb; margin-bottom:0.4rem;">
+                  Names that currently satisfy your drawdown and forward P/E constraints.
+                </div>
+              </div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
         render_buy_zone(df_tech, df_ndx, focus_mode, height=430)
 
     # Macro context panel at bottom
-    st.markdown("<div style='margin-top:1.2rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:1.3rem;'></div>", unsafe_allow_html=True)
     st.markdown(
-        "<div class='glass-panel'>"
-        "<div style='font-size:0.75rem; letter-spacing:0.18em; text-transform:uppercase; "
-        "color:#9ca3af; margin-bottom:0.5rem;'>Macro Backdrop</div>",
+        """
+        <div class="modern-panel">
+          <div class="modern-panel-inner">
+            <div style="font-size:0.72rem; letter-spacing:0.2em; text-transform:uppercase;
+                        color:#9ca3af; margin-bottom:0.5rem;">
+              Macro Backdrop
+            </div>
+          </div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
     render_macro_section("Modern")
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # VM explainer in expander
     with st.expander("How this engine thinks (VM Score & Value Signals)"):
@@ -1629,7 +1688,7 @@ def layout_terminal():
 
         st.markdown("#### Buy-Zone Screener")
         render_buy_zone(df_tech, df_ndx, focus_mode, height=300)
-    # No explainer text here – terminal mode is just screens
+    # Terminal mode = pure screen, no explanation block
 
 
 # -------------- CHOOSE LAYOUT ------------------
