@@ -453,7 +453,7 @@ st.markdown(theme_css, unsafe_allow_html=True)
 # -------------- SIDEBAR FILTERS ------------------
 
 with st.sidebar:
-    st.header("Buy-Zone Filters")
+    st.header("Buy Zone Filters")
     dd_required = st.slider(
         "Drawdown from 52w High (%)",
         min_value=0,
@@ -953,6 +953,11 @@ def get_stock_summary(tickers):
                 except ZeroDivisionError:
                     fpe = None
 
+            # Distance to 9 EMA in percent
+            dist_to_ema9 = None
+            if last_ema9 != 0:
+                dist_to_ema9 = round((last_close - last_ema9) / last_ema9 * 100, 2)
+
             rsi_zone_str = rsi_zone_text(rsi_val)
 
             value_signal = get_value_momentum_signal(
@@ -991,6 +996,7 @@ def get_stock_summary(tickers):
                     "20 EMA Bounce": ema20_bounce,
                     "Breakout Retest": breakout_retest,
                     "RSI Reset": rsi_reset,
+                    "Distance to 9 EMA (%)": dist_to_ema9,
                 }
             )
 
@@ -1515,15 +1521,23 @@ def render_trade_ideas(df: pd.DataFrame, height: int = 400):
         st.write("No data for trade ideas.")
         return
 
-    df = df[df["Ticker"].isin(TRADE_UNIVERSE)].copy()
-    if df.empty:
+    base = df[df["Ticker"].isin(TRADE_UNIVERSE)].copy()
+    if base.empty:
         st.write("No tickers from the trade universe are in the dataset.")
         return
 
-    # Primary trigger: EMA9 reclaim
-    df = df[df["9 EMA Reclaim"] == True].copy()
-    if df.empty:
-        st.write("No tickers currently reclaiming the 9-day EMA based on your universe.")
+    # Main list: strict EMA9 reclaim
+    main = base[base["9 EMA Reclaim"] == True].copy()
+
+    # Near EMA9 list: 1–5% away, not already reclaiming
+    near = pd.DataFrame()
+    if "Distance to 9 EMA (%)" in base.columns:
+        dist = base["Distance to 9 EMA (%)"]
+        near_mask = (base["9 EMA Reclaim"] != True) & dist.notna() & (dist.abs().between(1, 5))
+        near = base[near_mask].copy()
+
+    if main.empty and near.empty:
+        st.write("No tickers currently reclaiming or sitting 1–5% from the 9 Day EMA.")
         return
 
     def setup_strength(row):
@@ -1534,98 +1548,188 @@ def render_trade_ideas(df: pd.DataFrame, height: int = 400):
             flags += 1
         if row.get("Breakout Retest"):
             flags += 1
-        rsi_reset = bool(row.get("RSI Reset"))
+        rsi_reset_flag = bool(row.get("RSI Reset"))
 
-        if flags >= 2 and rsi_reset:
+        if flags >= 2 and rsi_reset_flag:
             return "High"
-        if flags >= 1 and rsi_reset:
+        if flags >= 1 and rsi_reset_flag:
             return "Medium"
         return "Low"
 
-    df["Setup Strength"] = df.apply(setup_strength, axis=1)
+    # ---------- Main table: strict reclaims ----------
+    if not main.empty:
+        main["Setup Strength"] = main.apply(setup_strength, axis=1)
+        df_trades = main.set_index("Ticker")
 
-    df_trades = df.set_index("Ticker")
+        df_trades["Price & 1D"] = df_trades.apply(format_price_1d, axis=1)
+        df_trades["EMA9"] = df_trades.apply(
+            lambda r: format_ema9_display(r.get("EMA9", None), r.get("9 EMA Reclaim", False)),
+            axis=1,
+        )
 
-    df_trades["Price & 1D"] = df_trades.apply(format_price_1d, axis=1)
-    df_trades["EMA9"] = df_trades.apply(
-        lambda r: format_ema9_display(r.get("EMA9", None), r.get("9 EMA Reclaim", False)),
-        axis=1,
-    )
+        df_trades["20EMA Bounce"] = df_trades["20 EMA Bounce"].apply(
+            lambda x: "Yes" if bool(x) else "–"
+        )
+        df_trades["Breakout Retest"] = df_trades["Breakout Retest"].apply(
+            lambda x: "Yes" if bool(x) else "–"
+        )
+        df_trades["RSI Reset"] = df_trades["RSI Reset"].apply(
+            lambda x: "Yes" if bool(x) else "–"
+        )
 
-    df_trades["20EMA Bounce"] = df_trades["20 EMA Bounce"].apply(
-        lambda x: "Yes" if bool(x) else "–"
-    )
-    df_trades["Breakout Retest"] = df_trades["Breakout Retest"].apply(
-        lambda x: "Yes" if bool(x) else "–"
-    )
-    df_trades["RSI Reset"] = df_trades["RSI Reset"].apply(
-        lambda x: "Yes" if bool(x) else "–"
-    )
+        cols_order = [
+            "Price & 1D",
+            "EMA9",
+            "Setup Strength",
+            "% 5D",
+            "% 1M",
+            "% from 52w High",
+            "20EMA Bounce",
+            "Breakout Retest",
+            "RSI Reset",
+        ]
+        existing_cols = [c for c in cols_order if c in df_trades.columns]
+        df_trades_display = df_trades[existing_cols]
 
-    cols_order = [
-        "Price & 1D",
-        "EMA9",
-        "Setup Strength",
-        "% 5D",
-        "% 1M",
-        "% from 52w High",
-        "20EMA Bounce",
-        "Breakout Retest",
-        "RSI Reset",
-    ]
-    existing_cols = [c for c in cols_order if c in df_trades.columns]
-    df_trades_display = df_trades[existing_cols]
+        format_dict = {
+            "% 5D": "{:.1f}%",
+            "% 1M": "{:.1f}%",
+            "% from 52w High": "{:.1f}%",
+        }
 
-    format_dict = {
-        "% 5D": "{:.1f}%",
-        "% 1M": "{:.1f}%",
-        "% from 52w High": "{:.1f}%",
-    }
+        styled = df_trades_display.style.format(format_dict, na_rep="–")
 
-    styled = df_trades_display.style.format(format_dict, na_rep="–")
+        # Heatmaps for returns and drawdown
+        for col in ["% 5D", "% 1M"]:
+            if col in df_trades_display.columns and df_trades_display[col].notna().any():
+                vmin = df_trades_display[col].min()
+                vmax = df_trades_display[col].max()
+                styled = styled.apply(
+                    lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
+                    subset=[col],
+                    axis=0,
+                )
 
-    # Heatmaps for returns and drawdown
-    for col in ["% 5D", "% 1M"]:
-        if col in df_trades_display.columns and df_trades_display[col].notna().any():
-            vmin = df_trades_display[col].min()
-            vmax = df_trades_display[col].max()
+        if "% from 52w High" in df_trades_display.columns and df_trades_display["% from 52w High"].notna().any():
+            vmin = df_trades_display["% from 52w High"].min()
+            vmax = 0.0
             styled = styled.apply(
-                lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
-                subset=[col],
+                lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
+                subset=["% from 52w High"],
                 axis=0,
             )
 
-    if "% from 52w High" in df_trades_display.columns and df_trades_display["% from 52w High"].notna().any():
-        vmin = df_trades_display["% from 52w High"].min()
-        vmax = 0.0
-        styled = styled.apply(
-            lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
-            subset=["% from 52w High"],
-            axis=0,
+        # Styles
+        if "Price & 1D" in df_trades_display.columns:
+            styled = styled.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
+        if "Setup Strength" in df_trades_display.columns:
+            styled = styled.map(setup_strength_style, subset=IndexSlice[:, ["Setup Strength"]])
+
+        styled = styled.set_table_styles(
+            [
+                {"selector": "th.col_heading", "props": [("text-align", "center")]},
+                {"selector": "td", "props": [("text-align", "center")]},
+            ],
+            overwrite=False,
         )
 
-    # Styles
-    if "Price & 1D" in df_trades_display.columns:
-        styled = styled.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
-    if "Setup Strength" in df_trades_display.columns:
-        styled = styled.map(setup_strength_style, subset=IndexSlice[:, ["Setup Strength"]])
+        column_config = build_column_config(df_trades_display.columns)
 
-    styled = styled.set_table_styles(
-        [
-            {"selector": "th.col_heading", "props": [("text-align", "center")]},
-            {"selector": "td", "props": [("text-align", "center")]},
-        ],
-        overwrite=False,
-    )
+        st.dataframe(
+            styled,
+            width="stretch",
+            height=height,
+            column_config=column_config,
+        )
+    else:
+        st.write("No strict 9 Day EMA reclaims in the trade universe right now.")
 
-    column_config = build_column_config(df_trades_display.columns)
+    # ---------- Secondary table: near EMA9 ----------
+    if not near.empty:
+        st.markdown("##### Next in line (1–5% from 9 Day EMA)")
+        near["Setup Strength"] = near.apply(setup_strength, axis=1)
+        df_near = near.set_index("Ticker")
 
-    st.dataframe(
-        styled,
-        width="stretch",
-        height=height,
-        column_config=column_config,
-    )
+        df_near["Price & 1D"] = df_near.apply(format_price_1d, axis=1)
+        df_near["EMA9"] = df_near.apply(
+            lambda r: format_ema9_display(r.get("EMA9", None), False),
+            axis=1,
+        )
+
+        df_near["20EMA Bounce"] = df_near["20 EMA Bounce"].apply(
+            lambda x: "Yes" if bool(x) else "–"
+        )
+        df_near["Breakout Retest"] = df_near["Breakout Retest"].apply(
+            lambda x: "Yes" if bool(x) else "–"
+        )
+        df_near["RSI Reset"] = df_near["RSI Reset"].apply(
+            lambda x: "Yes" if bool(x) else "–"
+        )
+
+        cols_order_near = [
+            "Price & 1D",
+            "EMA9",
+            "Setup Strength",
+            "Distance to 9 EMA (%)",
+            "% 5D",
+            "% 1M",
+            "% from 52w High",
+            "20EMA Bounce",
+            "Breakout Retest",
+            "RSI Reset",
+        ]
+        existing_near = [c for c in cols_order_near if c in df_near.columns]
+        df_near_display = df_near[existing_near]
+
+        format_dict_near = {
+            "Distance to 9 EMA (%)": "{:.1f}%",
+            "% 5D": "{:.1f}%",
+            "% 1M": "{:.1f}%",
+            "% from 52w High": "{:.1f}%",
+        }
+
+        styled_near = df_near_display.style.format(format_dict_near, na_rep="–")
+
+        for col in ["% 5D", "% 1M"]:
+            if col in df_near_display.columns and df_near_display[col].notna().any():
+                vmin = df_near_display[col].min()
+                vmax = df_near_display[col].max()
+                styled_near = styled_near.apply(
+                    lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
+                    subset=[col],
+                    axis=0,
+                )
+
+        if "% from 52w High" in df_near_display.columns and df_near_display["% from 52w High"].notna().any():
+            vmin = df_near_display["% from 52w High"].min()
+            vmax = 0.0
+            styled_near = styled_near.apply(
+                lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
+                subset=["% from 52w High"],
+                axis=0,
+            )
+
+        if "Price & 1D" in df_near_display.columns:
+            styled_near = styled_near.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
+        if "Setup Strength" in df_near_display.columns:
+            styled_near = styled_near.map(setup_strength_style, subset=IndexSlice[:, ["Setup Strength"]])
+
+        styled_near = styled_near.set_table_styles(
+            [
+                {"selector": "th.col_heading", "props": [("text-align", "center")]},
+                {"selector": "td", "props": [("text-align", "center")]},
+            ],
+            overwrite=False,
+        )
+
+        column_config_near = build_column_config(df_near_display.columns)
+
+        st.dataframe(
+            styled_near,
+            width="stretch",
+            height=int(height * 0.7),
+            column_config=column_config_near,
+        )
 
 
 # -------------- FETCH CORE DATA ONCE ------------------
@@ -1716,11 +1820,11 @@ def layout_original():
     render_nasdaq_table(df_ndx, focus_mode, height=600)
 
     st.markdown("---")
-    st.markdown("## Buy-Zone Candidates (Screened by Your Rules)")
+    st.markmarkdown("## Buy Zone Candidates (Screened by Your Rules)")
     render_buy_zone(df_tech, df_ndx, focus_mode, height=400)
 
     st.markdown("---")
-    st.markdown("## Trade Ideas (9-Day EMA Reclaims)")
+    st.markdown("## Trade Ideas (9 Day EMA Reclaims)")
     render_trade_ideas(df_tech, height=400)
 
     render_how_to()
@@ -1780,7 +1884,7 @@ def layout_modern():
             row=tsm_row,
         )
 
-    # Main cockpit: left = Megacap, right = Buy-Zone
+    # Main cockpit: left = Megacap, right = Buy Zone
     st.markdown("<div style='margin-top:1.1rem;'></div>", unsafe_allow_html=True)
     col_left, col_right = st.columns([1.4, 1])
 
@@ -1810,7 +1914,7 @@ def layout_modern():
               <div class="modern-panel-inner">
                 <div style="font-size:0.72rem; letter-spacing:0.2em; text-transform:uppercase;
                             color:#9ca3af; margin-bottom:0.35rem;">
-                  Live Buy-Zone Screen
+                  Live Buy Zone Screen
                 </div>
                 <div style="font-size:0.85rem; color:#e5e7eb; margin-bottom:0.4rem;">
                   Names that currently satisfy your drawdown and forward P/E constraints.
@@ -1830,7 +1934,7 @@ def layout_modern():
           <div class="modern-panel-inner">
             <div style="font-size:0.72rem; letter-spacing:0.2em; text-transform:uppercase;
                         color:#9ca3af; margin-bottom:0.35rem;">
-              Trade Ideas (9-Day EMA Reclaims)
+              Trade Ideas (9 Day EMA Reclaims)
             </div>
           </div>
         </div>
