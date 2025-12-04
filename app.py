@@ -32,7 +32,7 @@ st.markdown(
         .sidebar-hint { display: none; }
     }
     </style>
-    <div class="sidebar-hint">🟢 Open filters in sidebar ⟵</div>
+    <div class="sidebar-hint">Open filters in sidebar ⟵</div>
     """,
     unsafe_allow_html=True,
 )
@@ -472,7 +472,7 @@ with st.sidebar:
         help="Upper limit for forward P/E in buy-zone candidates.",
     )
     only_value = st.checkbox(
-        "Only value signals (💚 / 🟡)",
+        "Only value signals (Deep/Watch)",
         value=False,
         help="Filter to Deep value pullback and Value watch.",
     )
@@ -670,6 +670,25 @@ NASDAQ100_TICKERS = [
 
 FOCUS_TICKERS = ["NVDA", "TSM", "AMD", "AVGO", "AMKR", "PLTR", "META"]
 
+TRADE_UNIVERSE = [
+    "NVDA",
+    "AMD",
+    "AVGO",
+    "TSM",
+    "MSFT",
+    "META",
+    "GOOG",
+    "AMZN",
+    "AAPL",
+    "CRM",
+    "NFLX",
+    "SMCI",
+    "MRVL",
+    "PANW",
+    "DDOG",
+    "NOW",
+]
+
 # -------------- STATUS MAPS ------------------
 
 real_symbols = [t for t, _ in US_MACRO_ETFS if t != "MARKET"] + [t for t, _ in GLOBAL_INDICES]
@@ -684,20 +703,20 @@ market_state_map["MARKET"] = get_market_state(active_symbol)
 
 def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
     if pct_from_high is None:
-        return "❔ Check data"
+        return "Check data"
 
     if (
         pct_from_high <= -30
         and (fpe is None or fpe <= 30)
         and (pct_1m is None or pct_1m <= 10)
     ):
-        return "💚 Deep value pullback"
+        return "Deep value pullback"
 
     if pct_from_high <= -15 and (fpe is None or fpe <= 35):
-        return "🟡 Value watch"
+        return "Value watch"
 
     if pct_1m is not None and pct_1m > 0 and pct_from_high >= -25:
-        return "🔵 Momentum trend"
+        return "Momentum trend"
 
     if (
         pct_from_high >= -5
@@ -705,9 +724,9 @@ def get_value_momentum_signal(rsi, pct_from_high, pct_1m, fpe):
         and fpe >= 45
         and (pct_1m is None or pct_1m >= 0)
     ):
-        return "🔴 Hot / extended"
+        return "Hot / extended"
 
-    return "⚪ Neutral"
+    return "Neutral"
 
 
 def compute_vm_score(rsi, pct_from_high, pct_1m, fpe):
@@ -859,6 +878,10 @@ def get_stock_summary(tickers):
             if len(close) < 10:
                 continue
 
+            # EMAs for trade signals
+            ema9 = close.ewm(span=9, adjust=False).mean()
+            ema20 = close.ewm(span=20, adjust=False).mean()
+
             last_close = float(close.iloc[-1])
             price = float(price_rt) if price_rt is not None else last_close
 
@@ -878,6 +901,16 @@ def get_stock_summary(tickers):
 
             rsi_series = RSIIndicator(close=close).rsi()
             rsi_val = float(round(rsi_series.iloc[-1], 2))
+
+            # 9 EMA reclaim signal:
+            # yesterday at/below EMA, today above EMA
+            if len(close) >= 2:
+                prev_close = float(close.iloc[-2])
+                prev_ema9 = float(ema9.iloc[-2])
+                last_ema9 = float(ema9.iloc[-1])
+                ema9_reclaim = (last_close > last_ema9) and (prev_close <= prev_ema9)
+            else:
+                ema9_reclaim = False
 
             try:
                 info = stock.get_info()
@@ -959,6 +992,7 @@ def get_stock_summary(tickers):
                     "P/E": pe,
                     "Fwd P/E": fpe,
                     "Market Cap": market_cap,
+                    "9 EMA Reclaim": ema9_reclaim,
                 }
             )
 
@@ -1052,13 +1086,13 @@ def vm_score_style(val):
     except Exception:
         score = None
 
-    if "💚" in txt:
+    if "Deep value pullback" in txt:
         return "color: #22c55e; font-weight: 800;"
-    if "🟡" in txt:
+    if "Value watch" in txt:
         return "color: #eab308; font-weight: 700;"
-    if "🔵" in txt:
+    if "Momentum trend" in txt:
         return "color: #3b82f6; font-weight: 700;"
-    if "🔴" in txt:
+    if "Hot / extended" in txt:
         return "color: #ef4444; font-weight: 700;"
 
     if score is not None:
@@ -1184,7 +1218,7 @@ def render_megacap_table(df: pd.DataFrame, accent: str, focus_mode: bool, height
     else:
         df_sorted = df.copy()
 
-    df_display = df_sorted.drop(columns=["Market Cap", "VM Score Raw"], errors="ignore")
+    df_display = df_sorted.drop(columns=["Market Cap", "VM Score Raw", "9 EMA Reclaim"], errors="ignore")
 
     df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
     df_display = df_display.drop(columns=["Price", "% 1D"], errors="ignore")
@@ -1268,7 +1302,7 @@ def render_nasdaq_table(df_ndx: pd.DataFrame, focus_mode: bool, height: int = 60
         df_ndx = df_ndx.loc[df_ndx.index.intersection(FOCUS_TICKERS)]
 
     df_ndx = df_ndx.sort_values("% from 52w High")
-    df_ndx_display = df_ndx.drop(columns=["Market Cap", "VM Score Raw"], errors="ignore")
+    df_ndx_display = df_ndx.drop(columns=["Market Cap", "VM Score Raw", "9 EMA Reclaim"], errors="ignore")
 
     df_ndx_display["Price & 1D"] = df_ndx_display.apply(format_price_1d, axis=1)
     df_ndx_display = df_ndx_display.drop(columns=["Price", "% 1D"], errors="ignore")
@@ -1438,17 +1472,112 @@ def render_how_to():
     st.markdown(
         """
 **VM Score (0–8) – combined value + drawdown + 1M price action, with hot penalty**  
-- Higher score = better blend of: **cheap / beaten-up / stabilising / not overheated**.  
+- Higher score = better blend of cheap, beaten-up, stabilising, not overheated.  
 
 **Value Signal (inside VM column)**  
-- 💚 **Deep value pullback** – Big drawdown vs 52-week high, low or reasonable forward P/E, and not already ripping.  
-- 🟡 **Value watch** – Decent pullback, valuation reasonable but not screaming.  
-- 🔵 **Momentum trend** – Positive 1-month performance with moderate drawdown.  
-- 🔴 **Hot / extended** – Near highs and/or expensive forward P/E with recent strength.  
-- ⚪ **Neutral** – No strong edge from value or price action.
+- Deep value pullback – Big drawdown vs 52-week high, low or reasonable forward P/E, and not already ripping.  
+- Value watch – Decent pullback, valuation reasonable but not screaming.  
+- Momentum trend – Positive 1-month performance with moderate drawdown.  
+- Hot / extended – Near highs and/or expensive forward P/E with recent strength.  
+- Neutral – No strong edge from value or price action.
 
 **RSI Zone** is now informational only – for context, not used in the VM Score or filters.
 """
+    )
+
+
+# -------------- TRADE IDEAS (9-EMA RECLAIM) ------------------
+
+
+def render_trade_ideas(df_tech: pd.DataFrame, height: int = 400):
+    if df_tech is None or df_tech.empty:
+        st.write("No data loaded for trade ideas.")
+        return
+
+    df = df_tech.copy()
+    df = df[df["Ticker"].isin(TRADE_UNIVERSE)]
+
+    if df.empty:
+        st.write("No tickers from the trade universe are available.")
+        return
+
+    # Only tickers with active 9 EMA reclaim signal
+    df = df[df["9 EMA Reclaim"] == True]
+
+    if df.empty:
+        st.write("No current trade ideas based on 9-day EMA reclaim.")
+        return
+
+    df = df.set_index("Ticker")
+
+    df_display = df.drop(columns=["Market Cap", "VM Score Raw", "9 EMA Reclaim"], errors="ignore")
+
+    df_display["Price & 1D"] = df_display.apply(format_price_1d, axis=1)
+    df_display = df_display.drop(columns=["Price", "% 1D"], errors="ignore")
+
+    desired_order = [
+        "Price & 1D",
+        "% 5D",
+        "% 1M",
+        "% from 52w High",
+        "RSI Zone",
+        "Fwd P/E",
+        "VM Score",
+    ]
+    existing_cols = [c for c in desired_order if c in df_display.columns]
+    df_display = df_display[existing_cols]
+
+    format_dict = {
+        "Price & 1D": "{}",
+        "% 5D": "{:.1f}%",
+        "% 1M": "{:.1f}%",
+        "% from 52w High": "{:.1f}%",
+        "Fwd P/E": "{:.1f}",
+    }
+
+    styled = df_display.style.format(format_dict, na_rep="–")
+
+    pct_cols = ["% 5D", "% 1M"]
+    dist_col = "% from 52w High"
+
+    for col in pct_cols:
+        if df_display[col].notna().any():
+            vmin = df_display[col].min()
+            vmax = df_display[col].max()
+            styled = styled.apply(
+                lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
+                subset=[col],
+                axis=0,
+            )
+
+    if dist_col in df_display.columns and df_display[dist_col].notna().any():
+        vmin = df_display[dist_col].min()
+        vmax = 0.0
+        styled = styled.apply(
+            lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
+            subset=[dist_col],
+            axis=0,
+        )
+
+    styled = styled.map(rsi_zone_style, subset=IndexSlice[:, ["RSI Zone"]])
+    styled = styled.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
+    styled = styled.map(vm_score_style, subset=IndexSlice[:, ["VM Score"]])
+
+    styled = styled.set_table_styles(
+        [
+            {"selector": "th.col_heading", "props": [("text-align", "center")]},
+            {"selector": "td", "props": [("text-align", "center")]},
+        ],
+        overwrite=False,
+    )
+
+    column_config = build_column_config(df_display.columns)
+
+    st.dataframe(
+        styled,
+        width="stretch",
+        height=height,
+        column_config=column_config,
     )
 
 
@@ -1534,7 +1663,7 @@ def layout_original():
 
     st.markdown("---")
     st.markdown(
-        "<h2>NASDAQ 100 DEEP DRAWDOWN RADAR</h2>",
+        "<h2>NASDAQ 100 Drawdown</h2>",
         unsafe_allow_html=True,
     )
     render_nasdaq_table(df_ndx, focus_mode, height=600)
@@ -1542,6 +1671,10 @@ def layout_original():
     st.markdown("---")
     st.markdown("## Buy-Zone Candidates (Screened by Your Rules)")
     render_buy_zone(df_tech, df_ndx, focus_mode, height=400)
+
+    st.markdown("---")
+    st.markdown("## Trade Ideas (9-Day EMA Reclaims)")
+    render_trade_ideas(df_tech, height=400)
 
     render_how_to()
 
@@ -1558,7 +1691,7 @@ def layout_modern():
               Modern Mode · Systemic Risk Console
             </div>
             <div style="font-size:0.9rem; color:#f9fafb;">
-              Core AI & semiconductor stack, filtered by your downside and valuation rules.
+              Core AI and semiconductor stack, filtered by your downside and valuation rules.
             </div>
           </div>
         </div>
@@ -1567,7 +1700,7 @@ def layout_modern():
     )
 
     focus_mode = st.checkbox(
-        "Hyper-focus on AI & Semis (NVDA, TSM, AMD, AVGO, AMKR, PLTR, META)",
+        "Hyper-focus on AI and Semis (NVDA, TSM, AMD, AVGO, AMKR, PLTR, META)",
         key="focus_mode_modern",
         value=True,
     )
@@ -1611,10 +1744,10 @@ def layout_modern():
               <div class="modern-panel-inner">
                 <div style="font-size:0.72rem; letter-spacing:0.2em; text-transform:uppercase;
                             color:#9ca3af; margin-bottom:0.35rem;">
-                  Megacap & Core
+                  Megacap and Core
                 </div>
                 <div style="font-size:0.85rem; color:#e5e7eb; margin-bottom:0.45rem;">
-                  Ranked by market cap with VM score and 52w damage. This is the stack that matters.
+                  Ranked by market cap with VM score and 52-week damage. This is the stack that matters.
                 </div>
               </div>
             </div>
@@ -1642,6 +1775,26 @@ def layout_modern():
         )
         render_buy_zone(df_tech, df_ndx, focus_mode, height=430)
 
+    # Trade Ideas panel
+    st.markdown("<div style='margin-top:1.1rem;'></div>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="modern-panel">
+          <div class="modern-panel-inner">
+            <div style="font-size:0.72rem; letter-spacing:0.2em; text-transform:uppercase;
+                        color:#9ca3af; margin-bottom:0.35rem;">
+              Trade Ideas
+            </div>
+            <div style="font-size:0.85rem; color:#e5e7eb; margin-bottom:0.4rem;">
+              High-conviction 9-day EMA reclaim setups from your curated AI and tech universe.
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    render_trade_ideas(df_tech, height=400)
+
     # Macro context panel at bottom
     st.markdown("<div style='margin-top:1.3rem;'></div>", unsafe_allow_html=True)
     st.markdown(
@@ -1660,7 +1813,7 @@ def layout_modern():
     render_macro_section("Modern")
 
     # VM explainer in expander
-    with st.expander("How this engine thinks (VM Score & Value Signals)"):
+    with st.expander("How this engine thinks (VM Score and Value Signals)"):
         render_how_to()
 
 
@@ -1677,18 +1830,21 @@ def layout_terminal():
         )
 
     with col_left:
-        st.markdown("#### Macro & Indices Monitor")
+        st.markdown("#### Macro and Indices Monitor")
         render_macro_section("Terminal")
 
     with col_right:
-        st.markdown("#### Megacap & Core")
-        render_megacap_table(df_tech, accent, focus_mode, height=350)
+        st.markdown("#### Megacap and Core")
+        render_megacap_table(df_tech, accent, focus_mode, height=320)
 
-        st.markdown("#### Nasdaq-100 Deep Drawdown Radar")
-        render_nasdaq_table(df_ndx, focus_mode, height=350)
+        st.markdown("#### NASDAQ 100 Drawdown")
+        render_nasdaq_table(df_ndx, focus_mode, height=300)
 
         st.markdown("#### Buy-Zone Screener")
-        render_buy_zone(df_tech, df_ndx, focus_mode, height=300)
+        render_buy_zone(df_tech, df_ndx, focus_mode, height=260)
+
+        st.markdown("#### Trade Ideas (9-Day EMA Reclaims)")
+        render_trade_ideas(df_tech, height=260)
     # Terminal mode = pure screen, no explanation block
 
 
