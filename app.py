@@ -61,7 +61,7 @@ def get_ticker_status(symbol: str):
         if state == "PRE":
             price = info.get("preMarketPrice") or info.get("regularMarketPrice")
             change = info.get("preMarketChange")
-            change_pct = info.get("preMarketChangePercent"]
+            change_pct = info.get("preMarketChangePercent")
 
         elif state == "POST":
             price = info.get("postMarketPrice") or info.get("regularMarketPrice")
