@@ -32,7 +32,7 @@ st.markdown(
         .sidebar-hint { display: none; }
     }
     </style>
-    <div class="sidebar-hint">Open filters in sidebar ⟵</div>
+    <div class="sidebar-hint">🟢 Open filters in sidebar ⟵</div>
     """,
     unsafe_allow_html=True,
 )
@@ -61,7 +61,7 @@ def get_ticker_status(symbol: str):
         if state == "PRE":
             price = info.get("preMarketPrice") or info.get("regularMarketPrice")
             change = info.get("preMarketChange")
-            change_pct = info.get("preMarketChangePercent")
+            change_pct = info.get("preMarketChangePercent"]
 
         elif state == "POST":
             price = info.get("postMarketPrice") or info.get("regularMarketPrice")
@@ -670,23 +670,11 @@ NASDAQ100_TICKERS = [
 
 FOCUS_TICKERS = ["NVDA", "TSM", "AMD", "AVGO", "AMKR", "PLTR", "META"]
 
+# Trade universe for swing ideas
 TRADE_UNIVERSE = [
-    "NVDA",
-    "AMD",
-    "AVGO",
-    "TSM",
-    "MSFT",
-    "META",
-    "GOOG",
-    "AMZN",
-    "AAPL",
-    "CRM",
-    "NFLX",
-    "SMCI",
-    "MRVL",
-    "PANW",
-    "DDOG",
-    "NOW",
+    "NVDA", "AMD", "AVGO", "TSM", "MSFT", "META", "GOOG", "AMZN",
+    "AAPL", "CRM", "NFLX",
+    "SMCI", "MRVL", "PANW", "DDOG", "NOW",
 ]
 
 # -------------- STATUS MAPS ------------------
@@ -878,10 +866,6 @@ def get_stock_summary(tickers):
             if len(close) < 30:
                 continue
 
-            # EMAs for trade signals
-            ema9 = close.ewm(span=9, adjust=False).mean()
-            ema20 = close.ewm(span=20, adjust=False).mean()
-
             last_close = float(close.iloc[-1])
             price = float(price_rt) if price_rt is not None else last_close
 
@@ -899,39 +883,28 @@ def get_stock_summary(tickers):
             high_52wk = float(close.max())
             pct_from_52wk = round((price - high_52wk) / high_52wk * 100, 2)
 
+            # EMAs
+            ema9 = close.ewm(span=9, adjust=False).mean()
+            ema20 = close.ewm(span=20, adjust=False).mean()
+
+            prev_close = float(close.iloc[-2])
+            prev_ema9 = float(ema9.iloc[-2])
+            last_ema9 = float(ema9.iloc[-1])
+            prev_ema20 = float(ema20.iloc[-2])
+            last_ema20 = float(ema20.iloc[-1])
+
+            ema9_reclaim = (last_close > last_ema9) and (prev_close <= prev_ema9)
+            ema20_bounce = (last_close > last_ema20) and (prev_close <= prev_ema20)
+
+            recent_high_20 = float(close.iloc[-20:].max())
+            breakout_retest = (last_close >= recent_high_20) and (
+                (last_close - recent_high_20) / recent_high_20 <= 0.05
+            )
+
             rsi_series = RSIIndicator(close=close).rsi()
             rsi_val = float(round(rsi_series.iloc[-1], 2))
 
-            # --- Swing flags ---
-
-            if len(close) >= 2:
-                prev_close = float(close.iloc[-2])
-                prev_ema9 = float(ema9.iloc[-2])
-                last_ema9 = float(ema9.iloc[-1])
-
-                prev_ema20 = float(ema20.iloc[-2])
-                last_ema20 = float(ema20.iloc[-1])
-
-                ema9_reclaim = (last_close > last_ema9) and (prev_close <= prev_ema9)
-                ema20_bounce = (last_close > last_ema20) and (prev_close <= prev_ema20)
-            else:
-                ema9_reclaim = False
-                ema20_bounce = False
-
-            # Simple breakout / retest proxy:
-            # price above recent 20-day high, but not more than 5% above it
-            recent_high_20 = float(close.iloc[-20:].max())
-            if recent_high_20 > 0:
-                breakout_retest = (last_close >= recent_high_20) and (
-                    (last_close - recent_high_20) / recent_high_20 <= 0.05
-                )
-            else:
-                breakout_retest = False
-
-            # RSI reset: cooldown zone
             rsi_reset = 35 <= rsi_val <= 55
-
-            # --- Fundamentals / valuation ---
 
             try:
                 info = stock.get_info()
@@ -1013,6 +986,7 @@ def get_stock_summary(tickers):
                     "P/E": pe,
                     "Fwd P/E": fpe,
                     "Market Cap": market_cap,
+                    "EMA9": last_ema9,
                     "9 EMA Reclaim": ema9_reclaim,
                     "20 EMA Bounce": ema20_bounce,
                     "Breakout Retest": breakout_retest,
@@ -1129,6 +1103,29 @@ def vm_score_style(val):
         return "color: #9ca3af; font-weight: 500;"
 
     return ""
+
+
+def setup_strength_style(val):
+    if val == "High":
+        return "color: #22c55e; font-weight: 700;"
+    if val == "Medium":
+        return "color: #eab308; font-weight: 600;"
+    if val == "Low":
+        return "color: #9ca3af; font-weight: 500;"
+    return ""
+
+
+def format_ema9_display(ema_val, reclaim_flag):
+    if pd.isna(ema_val):
+        return "–"
+    try:
+        v = float(ema_val)
+    except Exception:
+        return "–"
+    val_str = f"{v:.2f}"
+    if bool(reclaim_flag):
+        return f"{val_str} (reclaim)"
+    return val_str
 
 
 # -------------- MACRO RENDERING ------------------
@@ -1496,21 +1493,142 @@ def render_how_to():
     st.markdown(
         """
 **VM Score (0–8) – combined value + drawdown + 1M price action, with hot penalty**  
-- Higher score = better blend of: **cheap / beaten-up / stabilising / not overheated**.  
+- Higher score = better blend of: cheap / beaten-up / stabilising / not overheated.  
 
 **Value Signal (inside VM column)**  
-- 💚 **Deep value pullback** – Big drawdown vs 52-week high, low or reasonable forward P/E, and not already ripping.  
-- 🟡 **Value watch** – Decent pullback, valuation reasonable but not screaming.  
-- 🔵 **Momentum trend** – Positive 1-month performance with moderate drawdown.  
-- 🔴 **Hot / extended** – Near highs and/or expensive forward P/E with recent strength.  
-- ⚪ **Neutral** – No strong edge from value or price action.
+- 💚 Deep value pullback – Big drawdown vs 52-week high, low or reasonable forward P/E, and not already ripping.  
+- 🟡 Value watch – Decent pullback, valuation reasonable but not screaming.  
+- 🔵 Momentum trend – Positive 1-month performance with moderate drawdown.  
+- 🔴 Hot / extended – Near highs and/or expensive forward P/E with recent strength.  
+- ⚪ Neutral – No strong edge from value or price action.
 
-**RSI Zone** is now informational only – for context, not used in the VM Score or filters.
+**RSI Zone** is informational only – context, not used directly in the VM Score or filters.
 """
     )
 
 
-# -------------- FETCH CORE DATA ONCE (CACHED, NO SPINNER) ------------------
+# -------------- TRADE IDEAS ------------------
+
+
+def render_trade_ideas(df: pd.DataFrame, height: int = 400):
+    if df is None or df.empty:
+        st.write("No data for trade ideas.")
+        return
+
+    df = df[df["Ticker"].isin(TRADE_UNIVERSE)].copy()
+    if df.empty:
+        st.write("No tickers from the trade universe are in the dataset.")
+        return
+
+    # Primary trigger: EMA9 reclaim
+    df = df[df["9 EMA Reclaim"] == True].copy()
+    if df.empty:
+        st.write("No tickers currently reclaiming the 9-day EMA based on your universe.")
+        return
+
+    def setup_strength(row):
+        flags = 0
+        if row.get("9 EMA Reclaim"):
+            flags += 1
+        if row.get("20 EMA Bounce"):
+            flags += 1
+        if row.get("Breakout Retest"):
+            flags += 1
+        rsi_reset = bool(row.get("RSI Reset"))
+
+        if flags >= 2 and rsi_reset:
+            return "High"
+        if flags >= 1 and rsi_reset:
+            return "Medium"
+        return "Low"
+
+    df["Setup Strength"] = df.apply(setup_strength, axis=1)
+
+    df_trades = df.set_index("Ticker")
+
+    df_trades["Price & 1D"] = df_trades.apply(format_price_1d, axis=1)
+    df_trades["EMA9"] = df_trades.apply(
+        lambda r: format_ema9_display(r.get("EMA9", None), r.get("9 EMA Reclaim", False)),
+        axis=1,
+    )
+
+    df_trades["20EMA Bounce"] = df_trades["20 EMA Bounce"].apply(
+        lambda x: "Yes" if bool(x) else "–"
+    )
+    df_trades["Breakout Retest"] = df_trades["Breakout Retest"].apply(
+        lambda x: "Yes" if bool(x) else "–"
+    )
+    df_trades["RSI Reset"] = df_trades["RSI Reset"].apply(
+        lambda x: "Yes" if bool(x) else "–"
+    )
+
+    cols_order = [
+        "Price & 1D",
+        "EMA9",
+        "Setup Strength",
+        "% 5D",
+        "% 1M",
+        "% from 52w High",
+        "20EMA Bounce",
+        "Breakout Retest",
+        "RSI Reset",
+    ]
+    existing_cols = [c for c in cols_order if c in df_trades.columns]
+    df_trades_display = df_trades[existing_cols]
+
+    format_dict = {
+        "% 5D": "{:.1f}%",
+        "% 1M": "{:.1f}%",
+        "% from 52w High": "{:.1f}%",
+    }
+
+    styled = df_trades_display.style.format(format_dict, na_rep="–")
+
+    # Heatmaps for returns and drawdown
+    for col in ["% 5D", "% 1M"]:
+        if col in df_trades_display.columns and df_trades_display[col].notna().any():
+            vmin = df_trades_display[col].min()
+            vmax = df_trades_display[col].max()
+            styled = styled.apply(
+                lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
+                subset=[col],
+                axis=0,
+            )
+
+    if "% from 52w High" in df_trades_display.columns and df_trades_display["% from 52w High"].notna().any():
+        vmin = df_trades_display["% from 52w High"].min()
+        vmax = 0.0
+        styled = styled.apply(
+            lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
+            subset=["% from 52w High"],
+            axis=0,
+        )
+
+    # Styles
+    if "Price & 1D" in df_trades_display.columns:
+        styled = styled.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
+    if "Setup Strength" in df_trades_display.columns:
+        styled = styled.map(setup_strength_style, subset=IndexSlice[:, ["Setup Strength"]])
+
+    styled = styled.set_table_styles(
+        [
+            {"selector": "th.col_heading", "props": [("text-align", "center")]},
+            {"selector": "td", "props": [("text-align", "center")]},
+        ],
+        overwrite=False,
+    )
+
+    column_config = build_column_config(df_trades_display.columns)
+
+    st.dataframe(
+        styled,
+        width="stretch",
+        height=height,
+        column_config=column_config,
+    )
+
+
+# -------------- FETCH CORE DATA ONCE ------------------
 
 df_tech = get_stock_summary(TOP_TECH_TICKERS)
 df_ndx = get_stock_summary(NASDAQ100_TICKERS)
@@ -1570,135 +1688,6 @@ def render_hero_kpi(label: str, ticker: str, row: pd.Series | None, status_tuple
     st.markdown(html, unsafe_allow_html=True)
 
 
-# -------------- TRADE IDEAS RENDERER ------------------
-
-
-def render_trade_ideas(df_tech: pd.DataFrame, height: int = 400):
-    if df_tech is None or df_tech.empty:
-        st.write("No data loaded for trade ideas.")
-        return
-
-    df = df_tech.copy()
-    df = df[df["Ticker"].isin(TRADE_UNIVERSE)]
-
-    if df.empty:
-        st.write("No tickers from the trade universe are available.")
-        return
-
-    # Core trigger: 9 EMA reclaim
-    df = df[df["9 EMA Reclaim"] == True]
-
-    if df.empty:
-        st.write("No current trade ideas based on 9-day EMA reclaim.")
-        return
-
-    # Setup strength
-    def setup_strength(row):
-        flags = 0
-        if row.get("9 EMA Reclaim"):
-            flags += 1
-        if row.get("20 EMA Bounce"):
-            flags += 1
-        if row.get("Breakout Retest"):
-            flags += 1
-        rsi_reset = bool(row.get("RSI Reset"))
-
-        if flags >= 2 and rsi_reset:
-            return "High"
-        if flags >= 1 and rsi_reset:
-            return "Medium"
-        return "Low"
-
-    df["Setup Strength"] = df.apply(setup_strength, axis=1)
-
-    df = df.set_index("Ticker")
-
-    # Build display
-    df_display = pd.DataFrame(index=df.index)
-    df_display["Price & 1D"] = df.apply(format_price_1d, axis=1)
-    df_display["% 5D"] = df["% 5D"]
-    df_display["% 1M"] = df["% 1M"]
-    df_display["% from 52w High"] = df["% from 52w High"]
-
-    df_display["9EMA Reclaim"] = df["9 EMA Reclaim"].map(lambda x: "Yes" if x else "–")
-    df_display["20EMA Bounce"] = df["20 EMA Bounce"].map(lambda x: "Yes" if x else "–")
-    df_display["Breakout Retest"] = df["Breakout Retest"].map(lambda x: "Yes" if x else "–")
-    df_display["RSI Reset"] = df["RSI Reset"].map(lambda x: "Yes" if x else "–")
-    df_display["Setup Strength"] = df["Setup Strength"]
-
-    df_display = df_display[
-        [
-            "Price & 1D",
-            "% 5D",
-            "% 1M",
-            "% from 52w High",
-            "9EMA Reclaim",
-            "20EMA Bounce",
-            "Breakout Retest",
-            "RSI Reset",
-            "Setup Strength",
-        ]
-    ]
-
-    fmt = {
-        "Price & 1D": "{}",
-        "% 5D": "{:.1f}%",
-        "% 1M": "{:.1f}%",
-        "% from 52w High": "{:.1f}%",
-    }
-
-    styled = df_display.style.format(fmt, na_rep="–")
-
-    for col in ["% 5D", "% 1M"]:
-        if df_display[col].notna().any():
-            vmin = df_display[col].min()
-            vmax = df_display[col].max()
-            styled = styled.apply(
-                lambda s, vmin=vmin, vmax=vmax: [color_tripolar(v, vmin, vmax) for v in s],
-                subset=[col],
-                axis=0,
-            )
-
-    if df_display["% from 52w High"].notna().any():
-        vmin = df_display["% from 52w High"].min()
-        vmax = 0.0
-        styled = styled.apply(
-            lambda s, vmin=vmin, vmax=vmax: [color_bipolar(v, vmin, vmax) for v in s],
-            subset=["% from 52w High"],
-            axis=0,
-        )
-
-    styled = styled.map(price_1d_style, subset=IndexSlice[:, ["Price & 1D"]])
-
-    def strength_style(val):
-        if val == "High":
-            return "color: #22c55e; font-weight: 700;"
-        if val == "Medium":
-            return "color: #eab308; font-weight: 700;"
-        if val == "Low":
-            return "color: #6b7280; font-weight: 600;"
-        return ""
-
-    styled = styled.map(strength_style, subset=IndexSlice[:, ["Setup Strength"]])
-
-    styled = styled.set_table_styles(
-        [
-            {"selector": "th.col_heading", "props": [("text-align", "center")]},
-            {"selector": "td", "props": [("text-align", "center")]},
-        ],
-        overwrite=False,
-    )
-
-    column_config = build_column_config(df_display.columns)
-
-    st.dataframe(
-        styled,
-        width="stretch",
-        height=height,
-        column_config=column_config,
-    )
-
-
 # -------------- LAYOUTS PER THEME ------------------
 
 
@@ -1727,12 +1716,12 @@ def layout_original():
     render_nasdaq_table(df_ndx, focus_mode, height=600)
 
     st.markdown("---")
-    st.markdown("## Trade Ideas (9-Day EMA Reclaims)")
-    render_trade_ideas(df_tech, height=400)
-
-    st.markdown("---")
     st.markdown("## Buy-Zone Candidates (Screened by Your Rules)")
     render_buy_zone(df_tech, df_ndx, focus_mode, height=400)
+
+    st.markdown("---")
+    st.markdown("## Trade Ideas (9-Day EMA Reclaims)")
+    render_trade_ideas(df_tech, height=400)
 
     render_how_to()
 
@@ -1833,14 +1822,14 @@ def layout_modern():
         )
         render_buy_zone(df_tech, df_ndx, focus_mode, height=430)
 
-    # Trade ideas panel
+    # Trade ideas row under that
     st.markdown("<div style='margin-top:1.1rem;'></div>", unsafe_allow_html=True)
     st.markdown(
         """
         <div class="modern-panel">
           <div class="modern-panel-inner">
             <div style="font-size:0.72rem; letter-spacing:0.2em; text-transform:uppercase;
-                        color:#9ca3af; margin-bottom:0.5rem;">
+                        color:#9ca3af; margin-bottom:0.35rem;">
               Trade Ideas (9-Day EMA Reclaims)
             </div>
           </div>
@@ -1892,14 +1881,14 @@ def layout_terminal():
         st.markdown("#### Megacap & Core")
         render_megacap_table(df_tech, accent, focus_mode, height=350)
 
-        st.markdown("#### NASDAQ 100 Drawdown")
+        st.markdown("#### Nasdaq 100 Drawdown")
         render_nasdaq_table(df_ndx, focus_mode, height=350)
-
-        st.markdown("#### Trade Ideas (9-Day EMA Reclaims)")
-        render_trade_ideas(df_tech, height=280)
 
         st.markdown("#### Buy-Zone Screener")
         render_buy_zone(df_tech, df_ndx, focus_mode, height=260)
+
+        st.markdown("#### Trade Ideas (9-Day EMA Reclaims)")
+        render_trade_ideas(df_tech, height=260)
     # Terminal mode = pure screen, no explanation block
 
 
