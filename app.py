@@ -1884,10 +1884,10 @@ def layout_terminal():
         st.markdown("#### Nasdaq 100 Drawdown")
         render_nasdaq_table(df_ndx, focus_mode, height=350)
 
-        st.markdown("#### Buy-Zone Screener")
+        st.markdown("#### Buy Zone Screener")
         render_buy_zone(df_tech, df_ndx, focus_mode, height=260)
 
-        st.markdown("#### Trade Ideas (9-Day EMA Reclaims)")
+        st.markdown("#### Trade Ideas (9 Day EMA Reclaims)")
         render_trade_ideas(df_tech, height=260)
     # Terminal mode = pure screen, no explanation block
 
