@@ -49,10 +49,10 @@ def render_investment_calculator():
 
     with col1:
         lump_sum = st.number_input(
-            "Lump sum (€)", min_value=0.0, value=10000.0, step=1000.0
+            "Lump sum", min_value=0.0, value=10000.0, step=1000.0
         )
         monthly = st.number_input(
-            "Monthly DCA (€)", min_value=0.0, value=500.0, step=100.0
+            "Monthly DCA", min_value=0.0, value=500.0, step=100.0
         )
 
     with col2:
@@ -75,9 +75,9 @@ def render_investment_calculator():
 
     st.markdown("---")
     c1, c2, c3 = st.columns(3)
-    c1.metric("Final value", f"€{final_value:,.0f}")
-    c2.metric("Total invested", f"€{total_contributed:,.0f}")
-    c3.metric("Gain", f"€{gain:,.0f}")
+    c1.metric("Final value", f"{final_value:,.0f}")
+    c2.metric("Total invested", f"{total_contributed:,.0f}")
+    c3.metric("Gain", f"{gain:,.0f}")
 
     # Year-by-year table (compact)
     data = []
@@ -87,7 +87,7 @@ def render_investment_calculator():
             v = lump_sum + monthly * m
         else:
             v = lump_sum * ((1 + r) ** m) + monthly * (((1 + r) ** m - 1) / r)
-        data.append({"Year": y, "Value (€)": round(v)})
+        data.append({"Year": y, "Value ()": round(v)})
 
     st.markdown("#### Growth over time")
     st.dataframe(pd.DataFrame(data), use_container_width=True)
