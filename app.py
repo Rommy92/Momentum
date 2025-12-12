@@ -37,6 +37,63 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
+# ============================
+# INVESTMENT CALCULATOR (MODAL)
+# ============================
+
+def render_investment_calculator():
+    st.subheader("Investment Growth Calculator")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        lump_sum = st.number_input(
+            "Lump sum (€)", min_value=0.0, value=10000.0, step=1000.0
+        )
+        monthly = st.number_input(
+            "Monthly DCA (€)", min_value=0.0, value=500.0, step=100.0
+        )
+
+    with col2:
+        cagr = st.number_input(
+            "CAGR (%)", min_value=0.0, value=10.0, step=0.5
+        )
+        years = st.slider("Years", 1, 40, 20)
+
+    months = years * 12
+
+    if cagr == 0:
+        final_value = lump_sum + monthly * months
+    else:
+        r = (1 + cagr / 100) ** (1 / 12) - 1
+        growth = (1 + r) ** months
+        final_value = lump_sum * growth + monthly * ((growth - 1) / r)
+
+    total_contributed = lump_sum + monthly * months
+    gain = final_value - total_contributed
+
+    st.markdown("---")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Final value", f"€{final_value:,.0f}")
+    c2.metric("Total invested", f"€{total_contributed:,.0f}")
+    c3.metric("Gain", f"€{gain:,.0f}")
+
+    # Year-by-year table (compact)
+    data = []
+    for y in range(1, years + 1):
+        m = y * 12
+        if cagr == 0:
+            v = lump_sum + monthly * m
+        else:
+            v = lump_sum * ((1 + r) ** m) + monthly * (((1 + r) ** m - 1) / r)
+        data.append({"Year": y, "Value (€)": round(v)})
+
+    st.markdown("#### Growth over time")
+    st.dataframe(pd.DataFrame(data), use_container_width=True)
+
+
+
 # -------------- REALTIME TICKER STATUS ------------------
 
 
@@ -455,236 +512,6 @@ st.markdown(theme_css, unsafe_allow_html=True)
 # INVESTMENT CALCULATOR (MODAL)
 # ============================
 
-# Floating button CSS (stays on top-right)
-st.markdown(
-    """
-    <style>
-    .calc-float-btn {
-        position: fixed;
-        top: 0.65rem;
-        right: 0.85rem;
-        z-index: 1000;
-    }
-    .calc-float-btn .stButton>button {
-        border-radius: 999px !important;
-        padding: 0.45rem 0.85rem !important;
-        font-weight: 700 !important;
-        border: 1px solid rgba(148,163,184,0.45) !important;
-        background: rgba(2,6,23,0.85) !important;
-        color: #e5e7eb !important;
-        box-shadow: 0 10px 28px rgba(0,0,0,0.6) !important;
-    }
-    .calc-float-btn .stButton>button:hover {
-        border: 1px solid rgba(250,204,21,0.65) !important;
-        transform: translateY(-1px);
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-if "show_calc" not in st.session_state:
-    st.session_state["show_calc"] = False
-
-
-def _future_value_monthly(
-    lump_sum: float,
-    monthly: float,
-    cagr_pct: float,
-    years: int,
-    contrib_timing: str = "end",  # "begin" or "end"
-) -> float:
-    """
-    FV with monthly compounding given annual CAGR.
-    - lump_sum invested at t=0
-    - monthly contributions each month (timing configurable)
-    - CAGR -> converted to effective monthly rate
-
-    r_m = (1 + CAGR)^(1/12) - 1
-    n = years * 12
-    FV = P*(1+r)^n + PMT * [((1+r)^n - 1)/r] * (1+r if begin else 1)
-    """
-    years = int(years)
-    n = years * 12
-    if n <= 0:
-        return float(lump_sum)
-
-    cagr = float(cagr_pct) / 100.0
-    if cagr <= -0.999999:
-        return float("nan")
-
-    r = (1.0 + cagr) ** (1.0 / 12.0) - 1.0
-
-    P = float(lump_sum)
-    PMT = float(monthly)
-
-    if abs(r) < 1e-12:
-        # ~0% CAGR: no growth
-        fv = P + PMT * n
-        return fv
-
-    growth = (1.0 + r) ** n
-    annuity = ((growth - 1.0) / r)
-
-    if contrib_timing == "begin":
-        annuity *= (1.0 + r)
-
-    fv = P * growth + PMT * annuity
-    return fv
-
-
-def _build_calc_table(scenarios: list[dict], years_list: list[int]) -> pd.DataFrame:
-    """
-    Returns a DataFrame:
-      rows = years
-      columns = scenario labels
-    Also adds deltas vs Scenario 1.
-    """
-    rows = []
-    for y in years_list:
-        row = {"Years": y}
-        for i, sc in enumerate(scenarios, start=1):
-            fv = _future_value_monthly(
-                lump_sum=sc["lump_sum"],
-                monthly=sc["monthly"],
-                cagr_pct=sc["cagr"],
-                years=y,
-                contrib_timing=sc["timing"],
-            )
-            row[f"Scenario {i} – {sc['name']}"] = fv
-        rows.append(row)
-
-    df = pd.DataFrame(rows).set_index("Years")
-
-    # Add deltas vs scenario 1 (helpful for quick comparisons)
-    base_col = df.columns[0] if len(df.columns) > 0 else None
-    if base_col:
-        for col in df.columns[1:]:
-            df[f"Delta vs S1 ({col.split('–',1)[-1].strip()})"] = df[col] - df[base_col]
-
-    return df
-
-
-def _render_calculator_dialog():
-    st.markdown("### Investment Growth Calculator")
-    st.caption("Lump sum + optional monthly contributions, compounded monthly from an annual CAGR assumption.")
-
-    years_list = list(range(1, 11)) + [15, 20]
-
-    left, right = st.columns([1.2, 1])
-    with left:
-        st.markdown("#### Settings")
-        timing = st.radio(
-            "Contribution timing",
-            options=["end", "begin"],
-            index=0,
-            help="End = contribute at month end (more conservative). Begin = month start (slightly higher FV).",
-        )
-        st.markdown("---")
-        st.markdown("#### Scenarios (up to 3)")
-
-    scenarios = []
-    for i in range(1, 4):
-        with right if i == 1 else st.container():
-            st.markdown(f"**Scenario {i}**")
-
-            c1, c2, c3 = st.columns([1.2, 1, 1])
-            with c1:
-                name = st.text_input(f"Name (Scenario {i})", value=f"CAGR {i}", key=f"calc_name_{i}")
-            with c2:
-                cagr = st.number_input(
-                    f"CAGR % (Scenario {i})",
-                    min_value=-50.0,
-                    max_value=200.0,
-                    value=10.0 if i == 1 else (15.0 if i == 2 else 20.0),
-                    step=0.5,
-                    key=f"calc_cagr_{i}",
-                )
-            with c3:
-                enabled = st.checkbox(f"Enable Scenario {i}", value=(i <= 2), key=f"calc_enabled_{i}")
-
-            c4, c5 = st.columns(2)
-            with c4:
-                lump_sum = st.number_input(
-                    f"Lump sum (Scenario {i})",
-                    min_value=0.0,
-                    value=10000.0,
-                    step=1000.0,
-                    key=f"calc_lump_{i}",
-                )
-            with c5:
-                monthly = st.number_input(
-                    f"Monthly DCA (Scenario {i})",
-                    min_value=0.0,
-                    value=500.0,
-                    step=50.0,
-                    key=f"calc_monthly_{i}",
-                )
-
-            st.markdown("---")
-
-        if enabled:
-            scenarios.append(
-                {
-                    "name": name.strip() if name.strip() else f"S{i}",
-                    "cagr": float(cagr),
-                    "lump_sum": float(lump_sum),
-                    "monthly": float(monthly),
-                    "timing": timing,
-                }
-            )
-
-    if len(scenarios) == 0:
-        st.info("Enable at least one scenario.")
-        return
-
-    df = _build_calc_table(scenarios, years_list)
-
-    # Pretty formatting
-    def _money(x):
-        if pd.isna(x):
-            return "–"
-        return f"${x:,.0f}"
-
-    st.markdown("#### Results")
-    st.dataframe(df.applymap(lambda v: v).style.format(_money), use_container_width=True)
-
-    # Small summary lines
-    st.markdown("---")
-    st.markdown("#### Quick read")
-    last_year = 20
-    if last_year in df.index:
-        row20 = df.loc[last_year]
-        for k, v in row20.items():
-            if "Delta vs" in k:
-                continue
-            st.write(f"{k} @ {last_year}y: {_money(v)}")
-
-
-# Floating open button (top-right)
-with st.container():
-    st.markdown('<div class="calc-float-btn">', unsafe_allow_html=True)
-    if st.button("Calculator", key="open_calc_btn"):
-        st.session_state["show_calc"] = True
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# Modal/dialog display (on top of everything)
-if st.session_state.get("show_calc", False):
-    # Newer Streamlit: st.dialog; if not available, fallback to st.expander
-    try:
-        @st.dialog("Investment Calculator", width="large")
-        def _calc_dialog():
-            _render_calculator_dialog()
-            if st.button("Close", key="close_calc_btn"):
-                st.session_state["show_calc"] = False
-
-        _calc_dialog()
-    except Exception:
-        # Fallback: not truly modal, but still usable
-        with st.expander("Investment Calculator", expanded=True):
-            _render_calculator_dialog()
-            if st.button("Close", key="close_calc_btn_fallback"):
-                st.session_state["show_calc"] = False
 
 # -------------- SIDEBAR FILTERS ------------------
 
@@ -1986,6 +1813,43 @@ def get_row_for_ticker(df: pd.DataFrame, ticker: str):
         return row.iloc[0]
     except Exception:
         return None
+
+# Floating calculator button
+st.markdown(
+    """
+    <style>
+    .calc-btn {
+        position: fixed;
+        bottom: 1.2rem;
+        right: 1.2rem;
+        z-index: 9999;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+with st.container():
+    st.markdown('<div class="calc-btn">', unsafe_allow_html=True)
+    if st.button("📈 Calculator"):
+        st.session_state["show_calc"] = True
+    st.markdown("</div>", unsafe_allow_html=True)
+
+if st.session_state.get("show_calc", False):
+    try:
+        @st.dialog("Investment Calculator", width="large")
+        def _calc_dialog():
+            render_investment_calculator()
+            if st.button("Close"):
+                st.session_state["show_calc"] = False
+
+        _calc_dialog()
+    except Exception:
+        # Fallback for older Streamlit
+        with st.expander("Investment Calculator", expanded=True):
+            render_investment_calculator()
+            if st.button("Close"):
+                st.session_state["show_calc"] = False
 
 
 def render_hero_kpi(label: str, ticker: str, row: pd.Series | None, status_tuple=None):
